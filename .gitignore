@@ -1,0 +1,51 @@
+# ============================================================
+# deploy-bundle .gitignore
+# ============================================================
+# 本仓库只发布脚本 / 文档 / 配置文件，**禁止** 把真实离线包推到 Git
+# （packages/ 下是二进制的 MySQL/Tomcat/JDK tarball + .deb/.rpm，
+#  以及客户现场采集到的 .deps_whitelist/.last_collected 等运行时产物，
+#  体积大、敏感、会被误以为是源代码）。
+# ============================================================
+
+# 离线包目录（按家族 × 架构组织的二进制产物，体积大、含真实包）
+/packages/
+packages/
+**/packages/
+
+# 沙箱 / 现场运行时产物
+collect.env
+*.env.local
+.env.local
+
+# 测试 / 调试残留
+*.bak
+*.orig
+*.tmp
+*.swp
+*.swo
+.cache/
+*.log
+test-output/
+.cache.test/
+
+# 备份目录（部署时自动产生，不入版本库）
+**/backups/
+**/backup-*/
+deploy-bundle-backups/
+
+# 用户本地配置
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Git / CI 不需要追踪的
+*.pid
+*.sock
+nohup.out
+
+# MySQL 数据目录（部署后产生，绝不入库）
+**/data/
+**/mysql-data/
+**/tomcat-data/
