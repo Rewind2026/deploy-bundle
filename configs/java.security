@@ -1,0 +1,24 @@
+# java.security - JDK 8u321+ 兼容性补丁
+# 背景：
+#   JDK 8u121 起 3DES 进入 legacy
+#   JDK 8u321 起 3DES 进入 disabled（默认禁用）
+#   JDK 8u341 起禁 RSA 密钥交换
+#   JDK 8u481 起禁所有 TLS_RSA_* + SHA-1 握手签名
+# 解决方案：把 3DES / SHA-1 / TLS_RSA_* 从 disabledAlgorithms 中**移除**
+#          并加到 legacyAlgorithms（白名单低优先级）。
+
+# === 禁用的算法：JDK 8u321+ 默认禁用集 ===
+jdk.tls.disabledAlgorithms=SSLv3, TLSv1, TLSv1.1, RC4, DES, MD5withRSA, DH keySize < 1024, EC keySize < 224
+
+# === 老算法白名单 ===
+jdk.tls.legacyAlgorithms=3DES_EDE_CBC, TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA, TLS_RSA_WITH_AES_128_CBC_SHA256, TLS_RSA_WITH_AES_256_CBC_SHA256
+
+# === DNS 缓存 ===
+networkaddress.cache.ttl=-1
+networkaddress.cache.negative.ttl=-1
+
+# === 熵源 ===
+securerandom.source=file:/dev/./urandom
+
+# === 证书路径禁用的算法 ===
+jdk.certpath.disabledAlgorithms=MD2, MD5, RSA keySize < 1024, EC keySize < 224

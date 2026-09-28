@@ -1,0 +1,68 @@
+# tomcat.service - Tomcat 9 systemd unit
+# 占位符：__CATALINA_HOME__ __JAVA_HOME__ __TOMCAT_USER__ __TOMCAT_GROUP__ __JVM_HEAP_SIZE__
+
+[Unit]
+Description=Apache Tomcat 9 Web Server (deploy-bundle managed)
+Documentation=https://tomcat.apache.org/tomcat-9.0-doc/
+After=network.target mysqld.service
+Wants=mysqld.service
+
+[Service]
+# Type=forking：catalina.sh start 是 fork 模式，父 java 立即 fork 子 JVM 后退出。
+# 必须 forking + PIDFile 让 systemd 跟踪真正的 Tomcat JVM。
+Type=forking
+User=__TOMCAT_USER__
+Group=__TOMCAT_GROUP__
+PIDFile=__CATALINA_HOME__/temp/tomcat.pid
+
+# === 关键：JAVA_HOME 显式声明 ===
+Environment=JAVA_HOME=__JAVA_HOME__
+Environment=CATALINA_HOME=__CATALINA_HOME__
+Environment=CATALINA_BASE=__CATALINA_HOME__
+Environment=CATALINA_PID=__CATALINA_HOME__/temp/tomcat.pid
+Environment=TOMCAT_HOME=__CATALINA_HOME__
+Environment=JRE_HOME=__JAVA_HOME__/jre
+# JDK 8u321+ 默认禁用 3DES / SHA-1：通过 JAVA_TOOL_OPTIONS 注入安全补丁
+Environment=JAVA_TOOL_OPTIONS=-Djava.security.properties==__JAVA_HOME__/conf/security/java.security
+
+ExecStartPre=/usr/bin/install -d -o __TOMCAT_USER__ -g __TOMCAT_GROUP__ -m 0755 \
+    __CATALINA_HOME__/temp __CATALINA_HOME__/work __CATALINA_HOME__/logs
+
+ExecStart=__JAVA_HOME__/bin/java \
+    -Djava.util.logging.config.file=__CATALINA_HOME__/conf/logging.properties \
+    -Djava.util.logging.manager=org.apache.juli.ClassLoaderLogManager \
+    -Dcatalina.home=__CATALINA_HOME__ \
+    -Dcatalina.base=__CATALINA_HOME__ \
+    -Xms__JVM_HEAP_SIZE__ \
+    -Xmx__JVM_HEAP_SIZE__ \
+    -XX:MetaspaceSize=256m \
+    -XX:MaxMetaspaceSize=512m \
+    -XX:+UseG1GC \
+    -XX:MaxGCPauseMillis=200 \
+    -XX:+HeapDumpOnOutOfMemoryError \
+    -XX:HeapDumpPath=__CATALINA_HOME__/logs/ \
+    -classpath __CATALINA_HOME__/bin/bootstrap.jar:__CATALINA_HOME__/bin/tomcat-juli.jar \
+    org.apache.catalina.startup.Bootstrap \
+    start
+
+# 用 catalina.sh stop 保证 shutdown hook 触发；force 跳过等待优雅关闭
+ExecStop=/bin/bash __CATALINA_HOME__/bin/catalina.sh stop -force 60
+ExecStopPost=/usr/bin/rm -f __CATALINA_HOME__/temp/tomcat.pid
+
+# === 重启策略 ===
+Restart=on-failure
+RestartSec=10
+
+# === 资源限制 ===
+LimitNOFILE=65535
+LimitNPROC=65535
+
+# === 安全 ===
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=__CATALINA_HOME__/temp __CATALINA_HOME__/work __CATALINA_HOME__/logs
+PrivateTmp=false
+
+[Install]
+WantedBy=multi-user.target

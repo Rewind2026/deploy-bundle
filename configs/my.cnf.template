@@ -1,0 +1,90 @@
+# my.cnf - MySQL 8 配置文件模板
+# 关键设计点：
+# 1. skip-name-resolve: 离线环境无 DNS，避免 30s+ 启动延迟
+# 2. default-time-zone: 国内业务统一 +08:00
+# 3. character-set-server: utf8mb4
+# 4. lower-case-table-names: 0（Linux 区分大小写）
+# 5. innodb_buffer_pool_size: 按物理内存自适应（脚本会 sed 替换）
+
+[mysqld]
+# === 基础 ===
+user                                = mysql
+port                                = __MYSQL_PORT__
+basedir                             = __MYSQL_HOME__
+datadir                             = __MYSQL_DATA_DIR__
+socket                              = __MYSQL_DATA_DIR__/mysql.sock
+pid-file                            = __MYSQL_DATA_DIR__/mysqld.pid
+log-error                           = __MYSQL_DATA_DIR__/error.log
+tmpdir                              = /tmp
+server-id                           = 1
+bind-address                        = 127.0.0.1
+
+# === 字符集 ===
+character-set-server                = utf8mb4
+collation-server                    = utf8mb4_0900_ai_ci
+skip-character-set-client-handshake = 1
+
+# === 时区（注意：等号赋值不带单引号） ===
+default-time-zone                   = +08:00
+
+# === 离线环境必须 ===
+skip-name-resolve                   = ON
+
+# === 认证插件：caching_sha2 为 MySQL 8 默认，admin 备用账号在 install_mysql.sh 中指定 ===
+# default_authentication_plugin 已在 8.0.27+ deprecated，8.4 LTS 已移除，无需显式设置
+
+# === 大小写 ===
+lower_case_table_names              = 0
+
+# === InnoDB ===
+innodb_buffer_pool_size             = __INNODB_BUFFER_POOL_SIZE__
+innodb_log_file_size                = __INNODB_LOG_FILE_SIZE__
+innodb_flush_log_at_trx_commit      = 1
+innodb_flush_method                 = O_DIRECT
+innodb_file_per_table               = 1
+innodb_io_capacity                  = 200
+innodb_io_capacity_max              = 2000
+innodb_buffer_pool_instances        = 4
+
+# === 性能与连接 ===
+max_connections                     = 500
+max_user_connections                = 480
+wait_timeout                        = 28800
+interactive_timeout                 = 28800
+thread_cache_size                   = 64
+table_open_cache                    = 4000
+table_definition_cache              = 2000
+open_files_limit                    = 65535
+max_allowed_packet                  = 64M
+
+# === 慢日志 ===
+slow_query_log                      = ON
+slow_query_log_file                 = __MYSQL_DATA_DIR__/slow.log
+long_query_time                     = 2
+log_queries_not_using_indexes       = ON
+
+# === sql_mode ===
+sql_mode                            = STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+
+# === 安全 ===
+local_infile                        = 0
+secure_file_priv                    = NULL
+
+# === performance_schema ===
+performance_schema                  = ON
+performance_schema_max_table_instances = 12500
+
+[client]
+port                                = __MYSQL_PORT__
+socket                              = __MYSQL_DATA_DIR__/mysql.sock
+default-character-set               = utf8mb4
+
+[mysql]
+default-character-set               = utf8mb4
+no-auto-rehash                      = 1
+
+[mysqldump]
+default-character-set               = utf8mb4
+quick
+quote-names
+max_allowed_packet                  = 64M

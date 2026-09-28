@@ -1,0 +1,60 @@
+# mysqld.service - MySQL 8 systemd unit
+# 占位符：__MYSQL_HOME__ -> /opt/mysql  __MYSQL_DATA_DIR__ -> /var/lib/mysql
+
+[Unit]
+Description=MySQL 8.0 database server (deploy-bundle managed)
+Documentation=https://dev.mysql.com/doc/refman/8.0/en/
+After=network.target
+
+[Service]
+# Type=simple：社区 glibc tarball 的 mysqld 不带 systemd notify 支持，
+# 仅 mysql-community RPM/Deb 才带。notify 会让 systemd 等 90s 超时。
+Type=simple
+User=mysql
+Group=mysql
+RuntimeDirectory=mysqld
+RuntimeDirectoryMode=0755
+
+# === 路径 ===
+ExecStartPre=/usr/bin/install -d -m 0755 -o mysql -g mysql __MYSQL_DATA_DIR__
+ExecStart=__MYSQL_HOME__/bin/mysqld \
+    --defaults-file=/etc/my.cnf \
+    --basedir=__MYSQL_HOME__ \
+    --datadir=__MYSQL_DATA_DIR__ \
+    --plugin-dir=__MYSQL_HOME__/lib/plugin \
+    --log-error=__MYSQL_DATA_DIR__/error.log \
+    --pid-file=__MYSQL_DATA_DIR__/mysqld.pid \
+    --socket=__MYSQL_DATA_DIR__/mysql.sock
+
+ExecStop=/bin/kill -TERM $MAINPID
+ExecStopPost=/usr/bin/rm -f __MYSQL_DATA_DIR__/mysqld.pid __MYSQL_DATA_DIR__/mysql.sock
+
+# === 重启策略 ===
+Restart=on-failure
+RestartPreventExitStatus=1
+RestartSec=5
+
+# === 资源限制 ===
+LimitNOFILE=65535
+LimitNPROC=65535
+LimitMEMLOCK=infinity
+
+# === 私 tmp 必须关闭 ===
+PrivateTmp=false
+
+# === 安全 ===
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=__MYSQL_DATA_DIR__
+
+# === 性能优化 ===
+OOMPolicy=continue
+OOMScoreAdjust=-100
+
+# === 环境 ===
+EnvironmentFile=-/etc/sysconfig/mysqld
+Environment=MYSQLD_PARENT_PID=1
+
+[Install]
+WantedBy=multi-user.target

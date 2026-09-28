@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  server.xml - Tomcat 9 配置模板
+  关键设计点：
+    1. 默认端口 8080（部署脚本会 sed 替换为占位符 TOMCAT_PORT）
+    2. Connector 使用 NIO（非 NIO2/APR，避免国产化 CPU 上 tcnative 缺失）
+    3. URIEncoding=UTF-8
+    4. maxThreads 按内存自适应
+    5. autoDeploy=false + unpackWARs=true（更可控）
+    占位符：__TOMCAT_PORT__ __TOMCAT_HOME__ __TOMCAT_APP_HOME__ __MAX_THREADS__
+-->
+<Server port="8005" shutdown="SHUTDOWN">
+  <Listener className="org.apache.catalina.startup.VersionLoggerListener" />
+  <Listener className="org.apache.catalina.core.AprLifecycleListener" SSLEngine="on" />
+  <Listener className="org.apache.catalina.core.JreMemoryLeakPreventionListener" />
+  <Listener className="org.apache.catalina.mbeans.GlobalResourcesLifecycleListener" />
+  <Listener className="org.apache.catalina.core.ThreadLocalLeakPreventionListener" />
+
+  <GlobalNamingResources>
+    <Resource name="UserDatabase" auth="Container"
+              type="org.apache.catalina.UserDatabase"
+              description="User database that can be updated and saved"
+              factory="org.apache.catalina.users.MemoryUserDatabaseFactory"
+              pathname="conf/tomcat-users.xml" />
+  </GlobalNamingResources>
+
+  <Service name="Catalina">
+    <Connector port="__TOMCAT_PORT__"
+               protocol="org.apache.coyote.http11.Http11NioProtocol"
+               connectionTimeout="20000"
+               maxThreads="__MAX_THREADS__"
+               minSpareThreads="25"
+               maxSpareThreads="100"
+               acceptCount="100"
+               enableLookups="false"
+               URIEncoding="UTF-8"
+               compression="on"
+               compressionMinSize="2048"
+               noCompressionUserAgents="gozilla, traviata"
+               compressableMimeType="text/html,text/xml,text/plain,text/css,text/javascript,application/javascript,application/json,application/xml"
+               redirectPort="8443" />
+
+    <Engine name="Catalina" defaultHost="localhost">
+      <Realm className="org.apache.catalina.realm.LockOutRealm">
+        <Realm className="org.apache.catalina.realm.UserDatabaseRealm"
+               resourceName="UserDatabase" />
+      </Realm>
+
+      <Host name="localhost"  appBase="__TOMCAT_APP_HOME__"
+            unpackWARs="true" autoDeploy="false"
+            deployOnStartup="false">
+
+        <Valve className="org.apache.catalina.valves.AccessLogValve" directory="logs"
+               prefix="localhost_access_log" suffix=".txt"
+               pattern="%h %l %u %t &quot;%r&quot; %s %b %D" />
+
+      </Host>
+    </Engine>
+  </Service>
+</Server>
