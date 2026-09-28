@@ -1,0 +1,5 @@
+deploy-bundle 1.0.0
+build: 2026-09-28
+target: MySQL 8.0 + Tomcat 9.x + JDK 1.8.x
+scope: Kylin V10/V11, UOS 1050/1070, openEuler 20.03/22.03/24.03, Anolis OS 8/23
+archs: x86_64, aarch64 (loongarch64 reserved for v2)
