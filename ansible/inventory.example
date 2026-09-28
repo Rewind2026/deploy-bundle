@@ -1,0 +1,34 @@
+# inventory.example - deploy-bundle Ansible 主机清单
+# 用法：
+#   cp inventory.example inventory
+#   vim inventory        # 修改 IP / 端口 / 凭据
+#   ansible-playbook -i inventory deploy.yml
+
+# === Web/应用服务器组（部署 Tomcat） ===
+[tomcat_servers]
+server01 ansible_host=192.168.1.101 ansible_user=deploy ansible_become=true
+server02 ansible_host=192.168.1.102 ansible_user=deploy ansible_become=true
+
+# === 数据库服务器组（部署 MySQL） ===
+[mysql_servers]
+db01 ansible_host=192.168.1.201 ansible_user=deploy ansible_become=true
+db02 ansible_host=192.168.1.202 ansible_user=deploy ansible_become=true
+
+# === 全量目标（同时装 MySQL + Tomcat） ===
+[deploy_targets:children]
+tomcat_servers
+mysql_servers
+
+# 可选分组（按 OS 拆分）
+[kylin_targets]
+server01 ansible_host=192.168.1.101 ansible_user=deploy ansible_become=true
+
+[uos_targets]
+server02 ansible_host=192.168.1.102 ansible_user=deploy ansible_become=true
+
+[openeuler_targets]
+db01 ansible_host=192.168.1.201 ansible_user=deploy ansible_become=true
+
+# === 全局变量 ===
+[deploy_targets:vars]
+ansible_python_interpreter=/usr/bin/python3

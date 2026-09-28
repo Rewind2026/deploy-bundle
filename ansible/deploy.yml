@@ -1,0 +1,124 @@
+---
+# deploy.yml - deploy-bundle 多机部署 playbook
+# 用法：
+#   1. cp inventory.example inventory && vim inventory
+#   2. 编辑 group_vars/all.yml（mysql_port / tomcat_port / skip_*）
+#   3. ansible-playbook -i inventory deploy.yml
+#   4. 仅预检：ansible-playbook -i inventory deploy.yml --tags precheck
+
+- name: deploy-bundle 离线部署
+  hosts: deploy_targets
+  become: true
+  become_method: sudo
+  gather_facts: true
+
+  vars_files:
+    - group_vars/all.yml
+
+  vars:
+    deploy_bundle_root: "{{ playbook_dir }}/.."
+    deploy_mode: "{{ deploy_mode | default('auto') }}"
+    run_stage: "{{ run_stage | default('all') }}"
+
+  serial: "{{ deploy_serial | default(5) }}"
+
+  tasks:
+    - name: 验证 deploy-bundle 目录完整性
+      ansible.builtin.stat:
+        path: "{{ deploy_bundle_root }}/installer.sh"
+      register: bundle_root_check
+      failed_when: not bundle_root_check.stat.exists
+      delegate_to: localhost
+      run_once: true
+
+    - name: 同步 deploy-bundle 到目标机临时目录
+      ansible.builtin.synchronize:
+        src: "{{ deploy_bundle_root }}/"
+        dest: "/tmp/deploy-bundle/"
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=__pycache__"
+          - "--exclude=*.pyc"
+
+    - name: 部署到 /opt/deploy-bundle
+      ansible.builtin.shell: |
+        if [ -d /opt/deploy-bundle ]; then
+          mv /opt/deploy-bundle /opt/deploy-bundle.bak.$(date +%Y%m%d%H%M%S) || true
+        fi
+        mkdir -p /opt
+        cp -a /tmp/deploy-bundle /opt/deploy-bundle
+        chmod +x /opt/deploy-bundle/installer.sh /opt/deploy-bundle/scripts/*.sh
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: 阶段：预检
+      ansible.builtin.command: >
+        bash /opt/deploy-bundle/installer.sh
+        --only=detect
+        --mysql-port={{ mysql_port }}
+        --tomcat-port={{ tomcat_port }}
+      args:
+        chdir: /opt/deploy-bundle
+      register: precheck_result
+      changed_when: false
+      when: run_stage in ['all', 'detect']
+
+    - name: 阶段：清理旧版本
+      ansible.builtin.command: >
+        bash /opt/deploy-bundle/installer.sh
+        --only=cleanup
+        --mysql-port={{ mysql_port }}
+        --tomcat-port={{ tomcat_port }}
+      args:
+        chdir: /opt/deploy-bundle
+      register: cleanup_result
+      changed_when: cleanup_result.rc == 0
+      when: run_stage in ['all', 'cleanup']
+
+    - name: 阶段：安装
+      ansible.builtin.command: >
+        bash /opt/deploy-bundle/installer.sh
+        --only=install
+        --mysql-port={{ mysql_port }}
+        --tomcat-port={{ tomcat_port }}
+        {% if skip_mysql | default(false) %}--skip-mysql{% endif %}
+        {% if skip_tomcat | default(false) %}--skip-tomcat{% endif %}
+        {% if skip_selinux | default(false) %}--skip-selinux{% endif %}
+        {% if skip_firewall | default(false) %}--skip-firewall{% endif %}
+      args:
+        chdir: /opt/deploy-bundle
+      register: install_result
+      when: run_stage in ['all', 'install']
+
+    - name: 阶段：健康检查
+      ansible.builtin.command: >
+        bash /opt/deploy-bundle/installer.sh
+        --only=healthcheck
+        --mysql-port={{ mysql_port }}
+        --tomcat-port={{ tomcat_port }}
+      args:
+        chdir: /opt/deploy-bundle
+      register: healthcheck_result
+      failed_when: false
+      changed_when: false
+      when: run_stage in ['all', 'healthcheck']
+
+    - name: 收集部署报告
+      ansible.builtin.fetch:
+        src: "/var/log/installer_report_{{ inventory_hostname }}_{{ ansible_date_time.date }}.txt"
+        dest: "./reports/{{ inventory_hostname }}/"
+        flat: true
+      ignore_errors: true
+      when: run_stage in ['all', 'healthcheck']
+
+    - name: 打印部署结果摘要
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          Host: {{ inventory_hostname }}
+          family: {{ ansible_os_family }} / {{ ansible_distribution }} {{ ansible_distribution_version }}
+          MySQL: {{ 'installed' if (skip_mysql | default(false)) == false else 'skipped' }}
+          Tomcat: {{ 'installed' if (skip_tomcat | default(false)) == false else 'skipped' }}
+          Healthcheck: {{ 'PASS' if (healthcheck_result.rc | default(0)) == 0 else 'WARN/FAIL' }}
+          ============================================

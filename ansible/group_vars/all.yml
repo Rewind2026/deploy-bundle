@@ -1,0 +1,21 @@
+# group_vars/all.yml - 部署参数（所有主机共用）
+# 可按主机分组覆盖：group_vars/<group>.yml 或 host_vars/<host>.yml
+
+# 端口
+mysql_port: 3306
+tomcat_port: 8080
+
+# 阶段开关
+deploy_mode: auto          # interactive / auto / dry-run
+deploy_lang: zh-CN         # zh-CN / en-US
+deploy_serial: 5           # 每次并发部署主机数
+
+# 跳过项
+skip_mysql: false
+skip_tomcat: false
+skip_selinux: false
+skip_firewall: false
+
+# 仅运行某阶段（all / detect / cleanup / install / healthcheck）
+# 留空 = 跑全流程
+run_stage: all
