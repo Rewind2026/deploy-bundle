@@ -6,10 +6,12 @@
     2. Connector 使用 NIO（非 NIO2/APR，避免国产化 CPU 上 tcnative 缺失）
     3. URIEncoding=UTF-8
     4. maxThreads 按内存自适应
-    5. autoDeploy=false + unpackWARs=true（更可控）
+    5. autoDeploy=true + deployOnStartup=true + unpackWARs=true（拷 WAR 到应用目录即自动部署/解包）
+    6. ErrorReportValve 关闭错误页堆栈/版本信息（等保合规）
     占位符：__TOMCAT_PORT__ __TOMCAT_HOME__ __TOMCAT_APP_HOME__ __MAX_THREADS__
 -->
 <Server port="8005" shutdown="SHUTDOWN">
+<!-- 生产提示：8005/SHUTDOWN 用于本机优雅停机，如需加固可改为随机端口+随机指令 -->
   <Listener className="org.apache.catalina.startup.VersionLoggerListener" />
   <Listener className="org.apache.catalina.core.AprLifecycleListener" SSLEngine="on" />
   <Listener className="org.apache.catalina.core.JreMemoryLeakPreventionListener" />
@@ -30,14 +32,13 @@
                connectionTimeout="20000"
                maxThreads="__MAX_THREADS__"
                minSpareThreads="25"
-               maxSpareThreads="100"
                acceptCount="100"
                enableLookups="false"
                URIEncoding="UTF-8"
                compression="on"
                compressionMinSize="2048"
                noCompressionUserAgents="gozilla, traviata"
-               compressableMimeType="text/html,text/xml,text/plain,text/css,text/javascript,application/javascript,application/json,application/xml"
+               compressibleMimeType="text/html,text/xml,text/plain,text/css,text/javascript,application/javascript,application/json,application/xml"
                redirectPort="8443" />
 
     <Engine name="Catalina" defaultHost="localhost">
@@ -47,12 +48,16 @@
       </Realm>
 
       <Host name="localhost"  appBase="__TOMCAT_APP_HOME__"
-            unpackWARs="true" autoDeploy="false"
-            deployOnStartup="false">
+            unpackWARs="true" autoDeploy="true"
+            deployOnStartup="true">
 
         <Valve className="org.apache.catalina.valves.AccessLogValve" directory="logs"
                prefix="localhost_access_log" suffix=".txt"
                pattern="%h %l %u %t &quot;%r&quot; %s %b %D" />
+
+        <!-- 错误页不暴露 Tomcat 版本与异常堆栈（等保要求） -->
+        <Valve className="org.apache.catalina.valves.ErrorReportValve"
+               showReport="false" showServerInfo="false" />
 
       </Host>
     </Engine>
