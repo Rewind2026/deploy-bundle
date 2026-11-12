@@ -1,4 +1,3 @@
-id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 # INSTALL.md - 客户现场离线部署 5 步上手
 
 > 目标读者：客户现场实施人员 / DBA / 运维

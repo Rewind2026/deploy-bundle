@@ -1,4 +1,3 @@
-id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 # COLLECT_PLANNING.md - 镜像机选型与离线包构建指南
 
 > 目标读者: 交付方/实施方的打包工程师

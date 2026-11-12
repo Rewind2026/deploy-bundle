@@ -1,4 +1,3 @@
-id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 # FAQ (常见问题)
 
 ## Q0: deploy-bundle 的部署流程是什么? 是要先打包还是直接部署?

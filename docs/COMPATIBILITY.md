@@ -1,4 +1,3 @@
-id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 # 兼容性矩阵 (COMPATIBILITY.md)
 
 本表回答: 某个具体 OS 能不能用 deploy-bundle 部署？需要哪一份 family 的包？
