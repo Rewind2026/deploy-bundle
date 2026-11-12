@@ -1,5 +1,9 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
-# firewall.sh - firewalld / ufw / iptables 三态自适应
+# firewall.sh - 永久关闭防火墙（firewalld / ufw / iptables / nftables 自适应）
+# 背景：Tomcat/MySQL 端口可能现场调整，固定放行规则无法维护；
+# 离线内网环境按交付约定直接永久关闭防火墙。
+# 如需保留防火墙现状，部署时加 --skip-firewall 跳过本阶段。
 
 set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,101 +15,70 @@ require_root
 BACKUP_DIR="$(ensure_backup_dir firewall)"
 
 handle_firewalld() {
-    if ! command -v firewall-cmd >/dev/null 2>&1; then return 0; fi
-    if ! systemctl is-active --quiet firewalld 2>/dev/null; then
-        info "firewalld 未运行，跳过"; return 0
-    fi
-    info "firewalld 运行中 → 添加端口"
-    local services_added=(); local ports_added=()
-    if [[ "${SKIP_MYSQL}" -eq 0 ]]; then
-        if [[ "${MYSQL_PORT}" == "3306" ]]; then
-            if ! firewall-cmd --query-service=mysql >/dev/null 2>&1; then
-                run firewall-cmd --permanent --add-service=mysql 2>&1 | tee -a "${LOG_FILE}" \
-                    && services_added+=("mysql")
-            fi
-        else
-            if ! firewall-cmd --query-port="${MYSQL_PORT}/tcp" >/dev/null 2>&1; then
-                run firewall-cmd --permanent --add-port="${MYSQL_PORT}/tcp" 2>&1 | tee -a "${LOG_FILE}" \
-                    && ports_added+=("${MYSQL_PORT}/tcp")
-            fi
+    # 未安装 firewalld 直接跳过。
+    # 注意：不要写 "systemctl list-unit-files | grep -q" —— pipefail 下 grep -q
+    # 提前退出会让 systemctl 收到 SIGPIPE，整条管道非零，误触发 return 0。
+    [[ "$(systemctl list-unit-files 2>/dev/null | grep -c '^firewalld\.service')" -ge 1 ]] || return 0
+    if systemctl is-active --quiet firewalld 2>/dev/null; then
+        info "永久关闭 firewalld（stop + disable）"
+        if ! is_dry_run; then
+            run systemctl stop firewalld 2>&1 | tee -a "${LOG_FILE}" || warn "stop firewalld 失败"
         fi
     fi
-    if [[ "${SKIP_TOMCAT}" -eq 0 ]]; then
-        local tport="${TOMCAT_PORT}"
-        if ! firewall-cmd --query-port="${tport}/tcp" >/dev/null 2>&1; then
-            run firewall-cmd --permanent --add-port="${tport}/tcp" 2>&1 | tee -a "${LOG_FILE}" \
-                && ports_added+=("${tport}/tcp")
-        fi
-    fi
-    if [[ ${#services_added[@]} -gt 0 || ${#ports_added[@]} -gt 0 ]]; then
-        run firewall-cmd --reload 2>&1 | tee -a "${LOG_FILE}" \
-            && ok "firewalld 已重载" \
-            || warn "firewalld reload 失败"
-        info "新增服务：${services_added[*]:-（无）}"
-        info "新增端口：${ports_added[*]:-（无）}"
+    if ! is_dry_run; then
+        run systemctl disable firewalld 2>&1 | tee -a "${LOG_FILE}" || warn "disable firewalld 失败"
+        ok "firewalld 已永久关闭"
     fi
 }
 
 handle_ufw() {
-    if ! command -v ufw >/dev/null 2>&1; then return 0; fi
-    local status; status="$(ufw status 2>/dev/null | head -n1 || echo unknown)"
-    if [[ "${status}" != *"active"* ]]; then info "ufw 未启用，跳过"; return 0; fi
-    info "ufw 启用中 → 添加规则"
-    local ports_added=()
-    if [[ "${SKIP_MYSQL}" -eq 0 ]]; then
-        if ! ufw status | grep -qE " ${MYSQL_PORT}/tcp"; then
-            if ! is_dry_run; then
-                run ufw allow "${MYSQL_PORT}/tcp" 2>&1 | tee -a "${LOG_FILE}" \
-                    && ports_added+=("${MYSQL_PORT}/tcp")
-            fi
-        fi
+    command -v ufw >/dev/null 2>&1 || return 0
+    [[ "$(ufw status 2>/dev/null | head -n1)" == *"Status: active"* ]] || return 0
+    info "永久关闭 ufw"
+    if ! is_dry_run; then
+        run ufw disable 2>&1 | tee -a "${LOG_FILE}" || warn "ufw disable 失败"
+        ok "ufw 已永久关闭"
     fi
-    if [[ "${SKIP_TOMCAT}" -eq 0 ]]; then
-        if ! ufw status | grep -qE " ${TOMCAT_PORT}/tcp"; then
-            if ! is_dry_run; then
-                run ufw allow "${TOMCAT_PORT}/tcp" 2>&1 | tee -a "${LOG_FILE}" \
-                    && ports_added+=("${TOMCAT_PORT}/tcp")
-            fi
-        fi
-    fi
-    if [[ ${#ports_added[@]} -gt 0 ]]; then ok "ufw 已添加：${ports_added[*]}"; fi
 }
 
 handle_iptables() {
-    if ! command -v iptables >/dev/null 2>&1; then return 0; fi
-    if systemctl is-active --quiet firewalld 2>/dev/null; then info "firewalld 在管，跳过 iptables"; return 0; fi
-    if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
-        info "ufw 在管，跳过 iptables"; return 0
+    command -v iptables >/dev/null 2>&1 || return 0
+    if systemctl is-active --quiet firewalld 2>/dev/null; then
+        info "firewalld 在管（已关闭），跳过 iptables"
+        return 0
     fi
-    info "iptables 兜底放行"
-    if [[ "${SKIP_MYSQL}" -eq 0 ]]; then
-        if ! iptables -C INPUT -p tcp --dport "${MYSQL_PORT}" -j ACCEPT 2>/dev/null; then
-            if ! is_dry_run; then
-                run iptables -I INPUT -p tcp --dport "${MYSQL_PORT}" -j ACCEPT 2>&1 | tee -a "${LOG_FILE}" \
-                    && ok "iptables 已放行 ${MYSQL_PORT}"
-                if command -v service >/dev/null && service iptables save >/dev/null 2>&1; then
-                    run service iptables save 2>&1 | tee -a "${LOG_FILE}" || true
-                elif [[ -d /etc/iptables ]]; then
-                    iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
-                fi
-            fi
-        fi
+    if command -v ufw >/dev/null 2>&1 && [[ "$(ufw status 2>/dev/null)" == *"Status: active"* ]]; then
+        info "ufw 在管（已关闭），跳过 iptables"
+        return 0
     fi
-    if [[ "${SKIP_TOMCAT}" -eq 0 ]]; then
-        if ! iptables -C INPUT -p tcp --dport "${TOMCAT_PORT}" -j ACCEPT 2>/dev/null; then
-            if ! is_dry_run; then
-                run iptables -I INPUT -p tcp --dport "${TOMCAT_PORT}" -j ACCEPT 2>&1 | tee -a "${LOG_FILE}" \
-                    && ok "iptables 已放行 ${TOMCAT_PORT}"
-            fi
+    info "清空 iptables INPUT 过滤规则并持久化"
+    if ! is_dry_run; then
+        run iptables -F INPUT 2>&1 | tee -a "${LOG_FILE}" || warn "iptables -F INPUT 失败"
+        if command -v service >/dev/null && service iptables save >/dev/null 2>&1; then
+            run service iptables save 2>&1 | tee -a "${LOG_FILE}" || true
+        elif [[ -d /etc/iptables ]]; then
+            iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
         fi
+        ok "iptables INPUT 规则已清空"
+    fi
+}
+
+handle_nftables() {
+    systemctl is-active --quiet nftables 2>/dev/null || return 0
+    info "永久关闭 nftables（stop + disable）"
+    if ! is_dry_run; then
+        run systemctl stop nftables 2>&1 | tee -a "${LOG_FILE}" || warn "stop nftables 失败"
+        run systemctl disable nftables 2>&1 | tee -a "${LOG_FILE}" || warn "disable nftables 失败"
+        ok "nftables 已永久关闭"
     fi
 }
 
 handle_firewalld
 handle_ufw
 handle_iptables
+handle_nftables
 
-ok "防火墙策略调整完成（最小放行）"
+ok "防火墙已永久关闭（如需保留防火墙，请用 --skip-firewall）"
 info "备份位置：${BACKUP_DIR}"
 stage_end "firewall"
 exit "${EX_OK}"

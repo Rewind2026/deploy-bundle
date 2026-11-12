@@ -1,9 +1,12 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
-# install_mysql.sh - MySQL 8 离线部署
+# install_mysql.sh - MySQL 8.4 LTS 离线部署（硬性要求 8.4.x）
 
 set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
+# 读取 installer.sh 写入的参数（MYSQL_PORT / MYSQL_ROOT_PW 等）
+[[ -f /opt/deploy-bundle.env ]] && source /opt/deploy-bundle.env
 
 stage_begin "install_mysql"
 require_detect
@@ -51,7 +54,17 @@ local_deps_install() {
     esac
 }
 
-for dep in libaio numactl-libs ncurses-compat-libs; do
+# 依赖包名按 family / 包管理器映射（deb 系包名与 rpm 系完全不同）
+case "${PKG_MGR_VAL}" in
+    dpkg) DEP_LIST=(libaio libnuma1 libncurses6 libtinfo6) ;;
+    *)
+        case "${FAMILY}" in
+            rhel7-line) DEP_LIST=(libaio numactl-libs ncurses-libs) ;;
+            *)          DEP_LIST=(libaio numactl-libs ncurses-compat-libs) ;;
+        esac
+        ;;
+esac
+for dep in "${DEP_LIST[@]}"; do
     local_deps_install "${dep}"
 done
 
@@ -70,12 +83,19 @@ select_mysql_tar() {
     fi
     info "本机 glibc 版本提示：${host_glibc_minor} 系列（实际以 ${host_glibc_full:-未知} 为准）"
 
+    # aarch64 官方仅发布 glibc2.28 构建；glibc2.17 的 aarch64 客户机（麒麟 V10 SP1 鲲鹏等）不支持
+    if [[ "${ARCH_VAL}" == "aarch64" && "${host_glibc_minor}" == "17" ]]; then
+        die "${EX_DEPS}" "aarch64 + glibc2.17 组合不受支持（MySQL 8.4 官方无此构建）。请改用 glibc2.28 系 OS，或人工提供兼容包"
+    fi
+
+    # 硬性要求 8.4.x：只匹配 mysql-8.4.*，8.0/9.x 等一律不选
+    # 注意：官方文件名是 glibc2.17/glibc2.28，优先匹配与本机 glibc 同档位的构建
     local patterns=(
-        "mysql-8.*-linux-glibc${host_glibc_minor}-${ARCH_VAL}"
-        "mysql-8.*-linux-glibc2.28-${ARCH_VAL}"
-        "mysql-8.*-linux-glibc2.17-${ARCH_VAL}"
-        "mysql-8.*-${ARCH_VAL}"
-        "mysql-8."
+        "mysql-8.4.*-linux-glibc2.${host_glibc_minor}-${ARCH_VAL}"
+        "mysql-8.4.*-linux-glibc2.28-${ARCH_VAL}"
+        "mysql-8.4.*-linux-glibc2.17-${ARCH_VAL}"
+        "mysql-8.4.*-${ARCH_VAL}"
+        "mysql-8.4."
     )
     for pat in "${patterns[@]}"; do
         local found
@@ -83,8 +103,8 @@ select_mysql_tar() {
         [[ -n "${found}" && -f "${found}" ]] && { echo "${found}"; return 0; }
     done
 
-    find "${pkgs_dir}/rpms" -maxdepth 1 -name "mysql-community-server-*.rpm" 2>/dev/null | head -n1
-    find "${pkgs_dir}/debs" -maxdepth 1 -name "mysql-server_*.deb" 2>/dev/null | head -n1
+    find "${pkgs_dir}/rpms" -maxdepth 1 -name "mysql-community-server-8.4.*.rpm" 2>/dev/null | head -n1
+    find "${pkgs_dir}/debs" -maxdepth 1 -name "mysql-server_8.4.*.deb" 2>/dev/null | head -n1
 }
 
 MYSQL_PKG="$(select_mysql_tar || true)"
@@ -92,6 +112,12 @@ if [[ -z "${MYSQL_PKG}" || ! -e "${MYSQL_PKG}" ]]; then
     die "${EX_DEPS}" "未在 packages/${FAMILY}/${ARCH_VAL}/ 找到 MySQL 包"
 fi
 info "选中 MySQL 包：${MYSQL_PKG}"
+
+# 硬性版本守卫：MySQL 必须 8.4.x
+case "$(basename "${MYSQL_PKG}")" in
+    mysql-8.4.*|mysql-community-server-8.4.*|mysql-server_8.4.*) : ;;
+    *) die "${EX_DEPS}" "MySQL 硬性要求 8.4.x，实际选中：$(basename "${MYSQL_PKG}")，拒绝安装" ;;
+esac
 
 if [[ -e "${TARGET_MYSQL_DIR}" && ! -L "${TARGET_MYSQL_DIR}" ]]; then
     BACKUP_DIR="$(ensure_backup_dir mysql_existing)"
@@ -136,6 +162,17 @@ case "${MYSQL_PKG}" in
     *) die "${EX_DEPS}" "无法识别 MySQL 包格式：${MYSQL_PKG}" ;;
 esac
 
+# 离线硬检查：mysqld 动态库缺失（libaio/libnuma/ncurses 等）时立即报错，绝不带病继续
+if [[ -e "${MYSQL_BIN}" ]] && ! is_dry_run && command -v ldd >/dev/null 2>&1; then
+    MISSING_LIBS="$(ldd "${MYSQL_BIN}" 2>/dev/null | awk '/not found/ {print $1}' | sort -u || true)"
+    if [[ -n "${MISSING_LIBS}" ]]; then
+        die "${EX_DEPS}" "mysqld 缺失动态库：${MISSING_LIBS}
+请在镜像机用 collect_rpm_deps.sh / collect_deb_deps.sh 采集依赖，
+并把 rpm/deb 放入 packages/${FAMILY}/${ARCH_VAL}/{rpms,debs}/ 后重试"
+    fi
+fi
+info "mysqld 动态库依赖检查通过"
+
 info "确保 mysql 用户/组存在"
 if ! getent group mysql >/dev/null 2>&1; then
     if is_dry_run; then echo "[DRY-RUN] groupadd -r mysql"
@@ -148,8 +185,31 @@ if ! getent passwd mysql >/dev/null 2>&1; then
 fi
 
 if [[ -d "${TARGET_DATA_DIR}" && -n "$(ls -A "${TARGET_DATA_DIR}" 2>/dev/null)" ]]; then
-    warn "${TARGET_DATA_DIR} 已存在数据，保留并复用"
-    REINIT=0
+    # mysql.ibd 是 MySQL 8.0+ 数据目录的特征文件（新数据字典）。
+    # 没有 mysql.ibd 说明目录属于旧版 MySQL（5.x）或 MariaDB——系统表结构
+    # 与 8.4 完全不兼容，直接复用会导致启动失败（尤其常见于：本脚本卸载了
+    # mariadb-server，rpm 却不会删 /var/lib/mysql，残留旧数据目录被误判复用）。
+    if [[ -f "${TARGET_DATA_DIR}/mysql.ibd" ]]; then
+        warn "${TARGET_DATA_DIR} 已存在 MySQL 8.0+ 数据目录，保留并复用"
+        REINIT=0
+    else
+        warn "${TARGET_DATA_DIR} 是旧版 MySQL/MariaDB 数据目录（无 mysql.ibd），与 8.4 不兼容"
+        if is_dry_run; then
+            echo "[DRY-RUN] 备份并清空 ${TARGET_DATA_DIR}，随后重新初始化"
+            REINIT=1
+        else
+            bdir="$(ensure_backup_dir mysql_datadir)"
+            if mv "${TARGET_DATA_DIR}" "${bdir}/mysql_datadir_old" 2>/dev/null; then
+                mkdir -p "${TARGET_DATA_DIR}"
+                chown mysql:mysql "${TARGET_DATA_DIR}"
+                chmod 750 "${TARGET_DATA_DIR}"
+                ok "旧数据目录已备份至 ${bdir}/mysql_datadir_old，将重新初始化"
+                REINIT=1
+            else
+                die "${EX_SYS}" "旧数据目录备份失败（可能是独立挂载点），请人工处理：${TARGET_DATA_DIR}"
+            fi
+        fi
+    fi
 else
     REINIT=1
     info "初始化数据目录：${TARGET_DATA_DIR}"
@@ -160,7 +220,7 @@ else
             warn "TARGET_DATA_DIR 是独立挂载点，拒绝 rm"
             REINIT=0
         elif [[ -L "${TARGET_DATA_DIR}" ]]; then
-            local target; target="$(readlink -f "${TARGET_DATA_DIR}")"
+            target="$(readlink -f "${TARGET_DATA_DIR}")"
             warn "${TARGET_DATA_DIR} 是 symlink -> ${target}，拒绝 rm"
             REINIT=0
         else
@@ -179,15 +239,21 @@ fi
 TOTAL_MEM_MB="$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 2048)"
 if [[ "${TOTAL_MEM_MB}" -lt 1024 ]]; then
     BUFFER_POOL="256M"
-    LOG_FILE_SIZE="128M"
+    REDO_CAPACITY="128M"
 elif [[ "${TOTAL_MEM_MB}" -lt 4096 ]]; then
     BUFFER_POOL="$(awk -v m="${TOTAL_MEM_MB}" 'BEGIN{print int(m*0.4)"M"}')"
-    LOG_FILE_SIZE="256M"
-else
+    REDO_CAPACITY="256M"
+elif [[ "${TOTAL_MEM_MB}" -lt 8192 ]]; then
     BUFFER_POOL="$(awk -v m="${TOTAL_MEM_MB}" 'BEGIN{print int(m*0.5)"M"}')"
-    LOG_FILE_SIZE="512M"
+    REDO_CAPACITY="512M"
+elif [[ "${TOTAL_MEM_MB}" -lt 16384 ]]; then
+    BUFFER_POOL="$(awk -v m="${TOTAL_MEM_MB}" 'BEGIN{print int(m*0.6)"M"}')"
+    REDO_CAPACITY="1G"
+else
+    BUFFER_POOL="$(awk -v m="${TOTAL_MEM_MB}" 'BEGIN{print int(m*0.6)"M"}')"
+    REDO_CAPACITY="2G"
 fi
-info "InnoDB buffer_pool=${BUFFER_POOL}  log_file_size=${LOG_FILE_SIZE}"
+info "InnoDB buffer_pool=${BUFFER_POOL}  redo_capacity=${REDO_CAPACITY}（物理内存 ${TOTAL_MEM_MB}M）"
 
 MY_CNF="/etc/my.cnf"
 info "生成 ${MY_CNF}"
@@ -199,7 +265,7 @@ else
         -e "s|__MYSQL_HOME__|${TARGET_MYSQL_DIR}|g" \
         -e "s|__MYSQL_DATA_DIR__|${TARGET_DATA_DIR}|g" \
         -e "s|__INNODB_BUFFER_POOL_SIZE__|${BUFFER_POOL}|g" \
-        -e "s|__INNODB_LOG_FILE_SIZE__|${LOG_FILE_SIZE}|g" \
+        -e "s|__INNODB_REDO_LOG_CAPACITY__|${REDO_CAPACITY}|g" \
         "${CFG_DIR}/my.cnf.template" > "${MY_CNF}"
     chmod 644 "${MY_CNF}"
 fi
@@ -230,6 +296,7 @@ if [[ "${REINIT}" -eq 1 ]]; then
             --port=0 \
             --skip-networking \
             --skip-grant-tables \
+            --mysql-native-password=ON \
             --user=mysql \
             --basedir="${TARGET_MYSQL_DIR}" \
             --datadir="${TARGET_DATA_DIR}" \
@@ -242,7 +309,7 @@ if [[ "${REINIT}" -eq 1 ]]; then
                 sleep 1
                 kill -9 "${mysqld_pid}" 2>/dev/null || true
             fi
-            rm -f "${sock}" "${init_log}"
+            rm -f "${sock}"   # init_log 保留，失败排障用
         }
         trap cleanup_init EXIT ERR INT TERM
 
@@ -264,32 +331,57 @@ if [[ "${REINIT}" -eq 1 ]]; then
 
         ROOT_PW=""
         ADMIN_PW=""
-        ROOT_PW="$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20 || true)"
-        ADMIN_PW="$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20 || true)"
-        [[ -z "${ROOT_PW}" ]] && ROOT_PW="$(openssl rand -hex 12)"
-        [[ -z "${ADMIN_PW}" ]] && ADMIN_PW="$(openssl rand -hex 12)"
+        # 固定密码（installer.sh --mysql-password 可覆盖），不再随机生成
+        ROOT_PW="${MYSQL_ROOT_PW:-ywj02402570687}"
+        ADMIN_PW="${ROOT_PW}"
+        [[ -n "${ROOT_PW}" ]] || die "${EX_USAGE}" "MYSQL_ROOT_PW 未设置"
+        case "${ROOT_PW}" in
+            *"'"*|*'"'*|*\ *|*\\*|*";"*) die "${EX_USAGE}" "MYSQL_ROOT_PW 含非法字符（引号/空格/反斜杠/分号）" ;;
+        esac
 
-        "${MYSQL_CLI}" --socket="${sock}" --protocol=socket <<SQL
+        # 密码强度策略降级（防御性）：固定密码无大写/特殊字符，过不了 MEDIUM 策略（ERROR 1819）。
+        # 官方 tarball 默认不装 validate_password，但发行版包/遗留环境可能已启用。
+        # 按插件/组件两种形态的变量名逐一尝试，变量不存在即失败忽略（说明策略未启用，无需处理）。
+        "${MYSQL_CLI}" --socket="${sock}" --protocol=socket -e "SET GLOBAL validate_password.mixed_case_count=0;" 2>/dev/null || true
+        "${MYSQL_CLI}" --socket="${sock}" --protocol=socket -e "SET GLOBAL validate_password.number_count=0;" 2>/dev/null || true
+        "${MYSQL_CLI}" --socket="${sock}" --protocol=socket -e "SET GLOBAL validate_password.special_char_count=0;" 2>/dev/null || true
+        "${MYSQL_CLI}" --socket="${sock}" --protocol=socket -e "SET GLOBAL validate_password.length=4;" 2>/dev/null || true
+        "${MYSQL_CLI}" --socket="${sock}" --protocol=socket -e "SET GLOBAL validate_password.policy=0;" 2>/dev/null || true
+        "${MYSQL_CLI}" --socket="${sock}" --protocol=socket -e "SET GLOBAL validate_password_policy=0;" 2>/dev/null || true
+
+        "${MYSQL_CLI}" --socket="${sock}" --protocol=socket <<SQL || die "${EX_SYS}" "初始化账号/密码失败（若报 ERROR 1819 则密码策略降级未生效，请按报错调整），详见上方输出"
 FLUSH PRIVILEGES;
 ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY '${ROOT_PW}';
+CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED WITH caching_sha2_password BY '${ROOT_PW}';
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
 CREATE USER IF NOT EXISTS 'admin'@'localhost' IDENTIFIED WITH mysql_native_password BY '${ADMIN_PW}';
 GRANT ALL PRIVILEGES ON *.* TO 'admin'@'localhost' WITH GRANT OPTION;
 CREATE USER IF NOT EXISTS 'admin'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${ADMIN_PW}';
 GRANT ALL PRIVILEGES ON *.* TO 'admin'@'127.0.0.1' WITH GRANT OPTION;
-CREATE USER IF NOT EXISTS 'root'@'127.0.0.1' IDENTIFIED WITH caching_sha2_password BY '${ROOT_PW}';
-GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1' WITH GRANT OPTION;
+CREATE USER IF NOT EXISTS 'admin'@'%' IDENTIFIED WITH mysql_native_password BY '${ADMIN_PW}';
+GRANT ALL PRIVILEGES ON *.* TO 'admin'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 SQL
 
         umask 077
-        printf 'root@localhost (caching_sha2): %s\nroot@127.0.0.1 (caching_sha2): %s\nadmin@localhost (mysql_native_password): %s\nadmin@127.0.0.1 (mysql_native_password): %s\n' \
-            "${ROOT_PW}" "${ROOT_PW}" "${ADMIN_PW}" "${ADMIN_PW}" \
+        printf 'root@localhost (caching_sha2): %s\nroot@%% (caching_sha2, 远程): %s\nadmin@localhost (mysql_native_password): %s\nadmin@127.0.0.1 (mysql_native_password): %s\nadmin@%% (mysql_native_password, 远程): %s\n' \
+            "${ROOT_PW}" "${ROOT_PW}" "${ADMIN_PW}" "${ADMIN_PW}" "${ADMIN_PW}" \
             > "${TARGET_DATA_DIR}/.root_password"
         chmod 600 "${TARGET_DATA_DIR}/.root_password"
         chown mysql:mysql "${TARGET_DATA_DIR}/.root_password"
 
-        "${MYSQL_CLI}" --socket="${sock}" --protocol=socket -e "SHUTDOWN;"
+        # 注意：heredoc 中 FLUSH PRIVILEGES 执行后，skip-grant-tables 的授权表会被
+        # 重新加载、认证随即生效——此后任何新的无密码客户端连接都会报 ERROR 1045。
+        # 因此这里不能用 SHUTDOWN SQL，改用 SIGTERM 让临时实例干净关闭（等效）。
+        kill "${mysqld_pid}" 2>/dev/null || true
+        _si=0
+        while kill -0 "${mysqld_pid}" 2>/dev/null && [[ ${_si} -lt 15 ]]; do
+            sleep 1
+            _si=$((_si+1))
+        done
+        kill -9 "${mysqld_pid}" 2>/dev/null || true
         trap - EXIT ERR INT TERM
+        rm -f "${sock}"
         i=0
         while kill -0 "${mysqld_pid}" 2>/dev/null && [[ ${i} -lt 10 ]]; do
             sleep 1; i=$((i+1))
@@ -309,7 +401,7 @@ if [[ -x "${TARGET_MYSQL_DIR}/bin/mysql" ]]; then
 fi
 
 if ! is_dry_run; then
-    local tmp_env; tmp_env="$(mktemp /tmp/deploy-bundle.env.XXXXXX)"
+    tmp_env="$(mktemp /tmp/deploy-bundle.env.XXXXXX)"
     grep -v -E '^(MYSQL_HOME|MYSQL_BIN|MYSQL_CNF)=' /opt/deploy-bundle.env > "${tmp_env}" 2>/dev/null || true
     cat >> "${tmp_env}" <<EOF
 MYSQL_HOME=${TARGET_MYSQL_DIR}

@@ -1,3 +1,4 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
 # healthcheck.sh - 部署后体检
 
@@ -7,6 +8,8 @@ source "${SCRIPT_DIR}/lib.sh" 2>/dev/null || true
 
 ENV_FILE="/opt/deploy-bundle.env"
 [[ -f "${ENV_FILE}" ]] && source "${ENV_FILE}"
+# 加载探测结果（HAVE_SYSTEMD / OS_FAMILY 等），无则按非 systemd 兜底
+[[ -f /tmp/deploy-bundle.detect ]] && source /tmp/deploy-bundle.detect || true
 
 LOG_FILE="/var/log/installer_healthcheck_$(date +%Y%m%d_%H%M%S).log"
 REPORT_FILE="/var/log/installer_healthcheck_$(hostname)_$(date +%Y%m%d_%H%M%S).txt"
@@ -65,6 +68,17 @@ if [[ -f "${TARGET_DATA_DIR:-/var/lib/mysql}/.root_password" ]]; then
     if [[ -n "${ADMIN_PW}" ]]; then
         if "${TARGET_MYSQL_DIR:-/opt/mysql}/bin/mysql" -uadmin -p"${ADMIN_PW}" -h127.0.0.1 -e "SELECT VERSION();" >/dev/null 2>&1; then
             ok "MySQL login OK (admin@127.0.0.1)"
+            # 应用库检查（可选，不作为失败项）
+            APP_DB="${APP_DB_NAME:-nkw}"
+            APP_TABLES="$("${TARGET_MYSQL_DIR:-/opt/mysql}/bin/mysql" -uadmin -p"${ADMIN_PW}" -h127.0.0.1 -N \
+                -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${APP_DB}';" 2>/dev/null || echo "-1")"
+            if [[ "${APP_TABLES}" == "-1" ]]; then
+                warn "应用库 ${APP_DB} 查询失败"
+            elif [[ "${APP_TABLES}" == "0" ]]; then
+                warn "应用库 ${APP_DB} 不存在或无表（SQL 未导入？）"
+            else
+                ok "应用库 ${APP_DB} 就绪（${APP_TABLES} 张表）"
+            fi
         else
             warn "MySQL login failed; check .root_password"
         fi
@@ -88,6 +102,13 @@ fi
 tomcat_port="${TOMCAT_PORT:-8080}"
 if command -v ss >/dev/null 2>&1; then
     ss -ltn "( sport = :${tomcat_port} )" 2>/dev/null | grep -q LISTEN && ok "Tomcat port ${tomcat_port} listening" || { err "Tomcat port ${tomcat_port} not listening"; record_fail; }
+fi
+# ROOT 应用检查（可选，不作为失败项）
+ROOT_APP_DIR="${TARGET_TOMCAT_DIR:-/opt/tomcat}/webapps/ROOT"
+if [[ -d "${ROOT_APP_DIR}" && -n "$(ls -A "${ROOT_APP_DIR}" 2>/dev/null)" ]]; then
+    ok "ROOT app deployed at ${ROOT_APP_DIR}"
+else
+    warn "ROOT app not found at ${ROOT_APP_DIR}（WAR 未部署？）"
 fi
 
 # ---- Disk ----

@@ -1,3 +1,4 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
 # detect_kylin_uos.sh - 麒麟 Kylin / 统信 UOS 专项探测
 # 输出 8 个全局变量：KYLIN_UOS_OS / VARIANT / FAMILY / GLIBC / KERNEL / CODENAME / MILESTONE / ARCH
@@ -16,6 +17,8 @@ KYLIN_UOS_MILESTONE=""
 if [[ -f /etc/.kyinfo ]]; then
     KYLIN_UOS_MILESTONE="$(awk -F= '/milestone/ {gsub(/[ \t]+$/,"",$2); print $2}' /etc/.kyinfo 2>/dev/null | head -n1)"
     [[ -z "${KYLIN_UOS_MILESTONE}" ]] && KYLIN_UOS_MILESTONE="$(grep -E '^milestone=' /etc/.kyinfo 2>/dev/null | head -n1 | cut -d= -f2-)"
+    # dist name 形如 Kylin-Server-V11-2503；部分 V11 版本 milestone 不含 "V11" 字样（如 Release-General-20250715）
+    KYLIN_UOS_DIST_NAME="$(awk -F= '/^name=/ {print $2}' /etc/.kyinfo 2>/dev/null | head -n1)"
 fi
 
 if [[ -n "${KYLIN_UOS_MILESTONE}" ]]; then
@@ -24,7 +27,10 @@ if [[ -n "${KYLIN_UOS_MILESTONE}" ]]; then
     _KYLIN_MS_TAIL=""
     _KYLIN_V11_MINOR=""
 
+    # V11 识别：milestone 或 /etc/.kyinfo dist name 任一包含 V11
     if [[ "${_KYLIN_MS}" =~ V11-([0-9]+) ]]; then
+        _KYLIN_V11_MINOR="${BASH_REMATCH[1]}"
+    elif [[ "${KYLIN_UOS_DIST_NAME:-}" =~ V11-([0-9]+) ]]; then
         _KYLIN_V11_MINOR="${BASH_REMATCH[1]}"
     fi
     if [[ "${_KYLIN_MS}" =~ V10-?SP([0-9]+) ]]; then
@@ -34,7 +40,7 @@ if [[ -n "${KYLIN_UOS_MILESTONE}" ]]; then
         _KYLIN_MS_TAIL="${BASH_REMATCH[1]}"
     fi
 
-    if [[ "${_KYLIN_MS}" == *"V11"* ]]; then
+    if [[ "${_KYLIN_MS}" == *"V11"* || "${KYLIN_UOS_DIST_NAME:-}" == *"V11"* ]]; then
         case "${_KYLIN_V11_MINOR}" in
             ""|unknown)
                 KYLIN_UOS_OS="kylin-v11"

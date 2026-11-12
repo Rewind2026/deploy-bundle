@@ -1,3 +1,4 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
 # =============================================================================
 # lib.sh — deploy-bundle 子脚本公共库
@@ -20,11 +21,15 @@ set -Eeuo pipefail
 : "${DEPLOY_STAGE:=all}"
 : "${DEPLOY_LANG:=zh-CN}"
 : "${MYSQL_PORT:=3306}"
+# MySQL root/admin 固定密码（可用 --mysql-password 或环境变量覆盖）
+# 注意：该值会写入 /opt/deploy-bundle.env（600 权限），不要提交到公共仓库
+: "${MYSQL_ROOT_PW:=ywj02402570687}"
 : "${TOMCAT_PORT:=8080}"
 : "${SKIP_MYSQL:=0}"
 : "${SKIP_TOMCAT:=0}"
 : "${SKIP_SELINUX:=0}"
 : "${SKIP_FIREWALL:=0}"
+: "${SKIP_APP:=0}"
 : "${TARGET_BASE:=/opt}"
 : "${TARGET_JDK_DIR:=/opt/jdk}"
 : "${TARGET_MYSQL_DIR:=/opt/mysql}"
@@ -143,9 +148,9 @@ rpm_install_local() {
     local dir="${PKG_DIR}/${family}/${arch}/rpms"
     [[ -d "${dir}" ]] || die "${EX_DEPS}" "未找到 RPM 包目录：${dir}"
     if have_cmd dnf; then
-        run dnf -y --disablerepo='*' --enablerepo='local' install "${dir}"/*.rpm
+        run dnf -y --disablerepo='*' install "${dir}"/*.rpm
     elif have_cmd yum; then
-        run yum -y --disablerepo='*' --enablerepo='local' install "${dir}"/*.rpm
+        run yum -y --disablerepo='*' install "${dir}"/*.rpm
     elif have_cmd rpm; then
         run rpm -Uvh --nodeps --force "${dir}"/*.rpm
     else

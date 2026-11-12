@@ -1,3 +1,4 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
 # test_bundle.sh - deploy-bundle 本地集成测试
 # 用法（在项目根目录）：bash tests/test_bundle.sh
@@ -46,6 +47,7 @@ SCRIPTS=(
     scripts/selinux_relax.sh
     scripts/firewall.sh
     scripts/systemd_register.sh
+    scripts/deploy_app.sh
     scripts/healthcheck.sh
     scripts/rollback.sh
     scripts/collect.sh

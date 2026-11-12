@@ -1,3 +1,4 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
 # precheck.sh - 环境探测与旧版本扫描
 # 见 docs/COMPATIBILITY.md 与 detect_kylin_uos.sh 配套使用
@@ -80,8 +81,9 @@ detect_os() {
     else
         case "${OS_ID}" in
             kylin)
+                # 与 detect_kylin_uos.sh / lib.sh 对齐：V10 基线（含最常见的 SP1）glibc 2.17
                 case "${OS_VERSION}" in
-                    V10*)      OS_FAMILY="rhel8-line" ;;
+                    V10*)      OS_FAMILY="rhel7-line" ;;
                     V11*)      OS_FAMILY="openeuler-line" ;;
                     *)         OS_FAMILY="rhel8-line" ;;
                 esac ;;
@@ -122,8 +124,9 @@ detect_os() {
     fi
     info "OS family: ${OS_FAMILY}"
     if [[ "${ARCH}" == "loongarch64" ]]; then
-        OS_FAMILY="loongarch"
-        warn "LoongArch detected. Will use Loongson ecosystem packages."
+        err "LoongArch (loongarch64) is no longer supported by deploy-bundle."
+        err "Only x86_64 and aarch64 are supported. Aborting."
+        exit 1
     fi
 }
 

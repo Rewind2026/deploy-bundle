@@ -1,3 +1,4 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 # packages/ 不入库
 
 packages/ 下是现场采集/下载的真实离线包（MySQL/Tomcat/JDK tarball +

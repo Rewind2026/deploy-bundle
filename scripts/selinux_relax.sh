@@ -1,9 +1,12 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
 # selinux_relax.sh - SELinux / AppArmor 最小放宽
 
 set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
+# 读取 installer.sh 写入的参数（MYSQL_PORT / TOMCAT_PORT 自定义端口）
+[[ -f /opt/deploy-bundle.env ]] && source /opt/deploy-bundle.env || true
 
 stage_begin "selinux_relax"
 require_root
@@ -43,7 +46,7 @@ if [[ "${have_semanage}" -eq 1 ]]; then
     if is_dry_run; then
         echo "[DRY-RUN] semanage fcontext -a -t mysqld_db_t '/var/lib/mysql(/.*)?'"
     else
-        local fctx_list; fctx_list="$(mktemp)"
+        fctx_list="$(mktemp)"
         if semanage fcontext -l > "${fctx_list}" 2>/dev/null; then
             if grep -q '/var/lib/mysql(/.*)?.*mysqld_db_t' "${fctx_list}"; then
                 info "/var/lib/mysql context 已配置"
@@ -98,7 +101,7 @@ EOF
             fi
         fi
 
-        local perm_list; perm_list="$(mktemp)"
+        perm_list="$(mktemp)"
         if semanage permissive -l > "${perm_list}" 2>/dev/null; then
             if ! grep -q '^mysqld_t$' "${perm_list}"; then
                 run semanage permissive -a mysqld_t 2>&1 | tee -a "${LOG_FILE}" \

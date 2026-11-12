@@ -1,3 +1,4 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
 # systemd_register.sh - 注册 MySQL / Tomcat 为 systemd 服务
 
@@ -25,12 +26,6 @@ fi
 if [[ -f /opt/deploy-bundle.env ]]; then
     # shellcheck disable=SC1091
     source /opt/deploy-bundle.env
-fi
-
-TOTAL_MEM_MB="$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 2048)"
-if [[ "${TOTAL_MEM_MB}" -lt 2048 ]]; then HEAP="512m"
-elif [[ "${TOTAL_MEM_MB}" -lt 8192 ]]; then HEAP="$(awk -v m="${TOTAL_MEM_MB}" 'BEGIN{print int(m*0.25)"m"}')"
-else HEAP="$(awk -v m="${TOTAL_MEM_MB}" 'BEGIN{print int(m*0.4)"m"}')"
 fi
 
 if [[ "${SKIP_MYSQL}" -eq 0 ]]; then
@@ -64,15 +59,23 @@ if [[ "${SKIP_TOMCAT}" -eq 0 ]]; then
         cp -a "${SVC}" "${BACKUP_DIR}/tomcat.service.bak"
         warn "备份现有 ${SVC}"
     fi
-    info "注册 ${SVC}"
+    # 应用部署目录：优先读 install_tomcat.sh 写入的 env，兜底按 family 推导
+    APP_BASE="$(grep -E '^TOMCAT_APP_BASE=' /opt/deploy-bundle.env 2>/dev/null | cut -d= -f2- || true)"
+    if [[ -z "${APP_BASE}" ]]; then
+        case "$(os_family 2>/dev/null || echo rhel8-line)" in
+            deb-line) APP_BASE="/var/lib/tomcat/webapps" ;;
+            *)        APP_BASE="/var/lib/tomcats/webapps" ;;
+        esac
+    fi
+    info "注册 ${SVC}（应用目录：${APP_BASE}）"
     if is_dry_run; then
         echo "[DRY-RUN] write ${SVC}"
     else
         sed -e "s|__JAVA_HOME__|${TARGET_JDK_DIR}|g" \
             -e "s|__CATALINA_HOME__|${TARGET_TOMCAT_DIR}|g" \
-            -e "s|__JVM_HEAP_SIZE__|${HEAP}|g" \
             -e "s|__TOMCAT_USER__|tomcat|g" \
             -e "s|__TOMCAT_GROUP__|tomcat|g" \
+            -e "s|__TOMCAT_APP_BASE__|${APP_BASE}|g" \
             "${CFG_DIR}/tomcat.service" > "${SVC}"
         chmod 644 "${SVC}"
     fi
