@@ -1,3 +1,4 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 # inventory.example - deploy-bundle Ansible 主机清单
 # 用法：
 #   cp inventory.example inventory

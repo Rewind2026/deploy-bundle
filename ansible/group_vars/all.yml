@@ -1,3 +1,4 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 # group_vars/all.yml - 部署参数（所有主机共用）
 # 可按主机分组覆盖：group_vars/<group>.yml 或 host_vars/<host>.yml
 
