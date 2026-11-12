@@ -28,6 +28,28 @@ hdr()  { printf '\n%s===== %s =====%s\n' "${C_BLU}" "$*" "${C_RST}" | tee -a "${
 FAIL=0
 record_fail() { FAIL=$((FAIL+1)); }
 
+# 等待端口就绪：业务应用（Spring 等）启动期间 Tomcat 尚未绑定 Connector 端口，
+# MySQL 首次启动 InnoDB 恢复也会延迟 listen。立即检查会误报 not listening，
+# 让用户误以为部署失败。默认最多等 60 秒（PORT_WAIT_MAX 可覆盖）。
+wait_port() {
+    local port="$1" name="$2"
+    local max="${PORT_WAIT_MAX:-60}" i=0
+    if ! command -v ss >/dev/null 2>&1; then
+        warn "无 ss 命令，跳过 ${name} 端口检查"
+        return 0
+    fi
+    until ss -ltn "( sport = :${port} )" 2>/dev/null | grep -q LISTEN; do
+        i=$((i+1))
+        if [[ ${i} -ge ${max} ]]; then
+            err "${name} port ${port} not listening (waited ${max}s)"; record_fail
+            return 1
+        fi
+        [[ ${i} -eq 1 ]] && log "等待 ${name} 端口 ${port} 就绪（应用启动中，最多 ${max}s）..."
+        sleep 1
+    done
+    ok "${name} port ${port} listening"
+}
+
 # ---- JDK ----
 hdr "JDK health"
 if [[ -x "${TARGET_JDK_DIR:-/opt/jdk}/bin/java" ]]; then
@@ -56,11 +78,9 @@ elif pgrep -x mysqld >/dev/null 2>&1; then
 else
     err "mysqld not running"; record_fail
 fi
-# 端口检查
+# 端口检查（带就绪等待）
 mysql_port="${MYSQL_PORT:-3306}"
-if command -v ss >/dev/null 2>&1; then
-    ss -ltn "( sport = :${mysql_port} )" 2>/dev/null | grep -q LISTEN && ok "MySQL port ${mysql_port} listening" || { err "MySQL port ${mysql_port} not listening"; record_fail; }
-fi
+wait_port "${mysql_port}" "MySQL"
 # 登录尝试
 if [[ -f "${TARGET_DATA_DIR:-/var/lib/mysql}/.root_password" ]]; then
     ADMIN_PW="$(grep 'admin@localhost' "${TARGET_DATA_DIR}/.root_password" | awk '{print $NF}')"
@@ -99,9 +119,7 @@ else
     err "tomcat not running"; record_fail
 fi
 tomcat_port="${TOMCAT_PORT:-8080}"
-if command -v ss >/dev/null 2>&1; then
-    ss -ltn "( sport = :${tomcat_port} )" 2>/dev/null | grep -q LISTEN && ok "Tomcat port ${tomcat_port} listening" || { err "Tomcat port ${tomcat_port} not listening"; record_fail; }
-fi
+wait_port "${tomcat_port}" "Tomcat"
 # ROOT 应用检查（可选，不作为失败项）
 ROOT_APP_DIR="${TARGET_TOMCAT_DIR:-/opt/tomcat}/webapps/ROOT"
 if [[ -d "${ROOT_APP_DIR}" && -n "$(ls -A "${ROOT_APP_DIR}" 2>/dev/null)" ]]; then

@@ -177,9 +177,24 @@ if have_systemd; then
         echo "[DRY-RUN] systemctl restart tomcat"
     else
         run systemctl restart tomcat.service || die "${EX_SYS}" "tomcat 重启失败，请查看 journalctl -u tomcat"
-        sleep 3
-        if systemctl is-active --quiet tomcat.service; then
-            ok "tomcat 已重启（active），验证：curl -I http://localhost:${TOMCAT_PORT:-8080}/"
+        # 等待 8080 真正就绪：Tomcat 要等所有应用部署完成才绑定 Connector，
+        # 偏重的 Spring 应用需要 10-30 秒；systemd active ≠ 端口 ready。
+        # 不等待的话紧随其后的 healthcheck 会误报 "port not listening"，
+        # 让现场误以为部署失败。最多等 60 秒。
+        _pw=0
+        while ! ss -ltn "( sport = :${TOMCAT_PORT:-8080} )" 2>/dev/null | grep -q LISTEN; do
+            _pw=$((_pw+1))
+            if [[ ${_pw} -ge 60 ]]; then
+                warn "等待 ${TOMCAT_PORT:-8080} 就绪超时（60s），应用可能仍在启动，稍后用 healthcheck.sh 复查"
+                break
+            fi
+            [[ ${_pw} -eq 1 ]] && info "等待 Tomcat 端口 ${TOMCAT_PORT:-8080} 就绪（应用启动中，最多 60s）..."
+            sleep 1
+        done
+        if [[ ${_pw} -lt 60 ]] && ss -ltn "( sport = :${TOMCAT_PORT:-8080} )" 2>/dev/null | grep -q LISTEN; then
+            ok "tomcat 已重启且端口 ${TOMCAT_PORT:-8080} 就绪（等待 ${_pw}s），验证：curl -I http://localhost:${TOMCAT_PORT:-8080}/"
+        elif systemctl is-active --quiet tomcat.service; then
+            warn "tomcat 服务 active 但端口未就绪，请排查：${TARGET_TOMCAT_DIR}/logs/catalina.out"
         else
             warn "tomcat 服务未 active，请排查：journalctl -u tomcat 与 ${TARGET_TOMCAT_DIR}/logs/catalina.out"
         fi
