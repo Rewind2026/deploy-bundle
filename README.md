@@ -1,4 +1,3 @@
-id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 # deploy-bundle
 
 > 离线部署 MySQL 8.4 LTS + Tomcat 9 + JDK 1.8 到国产化 Linux（银河麒麟 Kylin V10/V11、统信 UOS 1050/1070、openEuler 20.03/22.03/24.03、龙蜥 Anolis OS 8/23 等）的自包含脚本套件。

@@ -1,4 +1,3 @@
-id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
 # tomcat-stop.sh - Tomcat 优雅停机脚本（deploy-bundle 生成）
 # 背景：catalina.sh stop 的等待时长写死 5 秒，偏重的 Spring 应用停不干净
