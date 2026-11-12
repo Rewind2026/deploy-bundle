@@ -1,4 +1,3 @@
-id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
 # collect_mysql.sh - 采集 MySQL 8.4 LTS tar.xz（硬性要求 8.4.x）
 # 架构支持：x86_64（glibc2.17 + glibc2.28 双变体）/ aarch64（仅 glibc2.28 官方构建）

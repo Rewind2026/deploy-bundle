@@ -1,4 +1,3 @@
-id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
 # collect_deb_deps.sh - 在 deb 系镜像机上真实下载 MySQL 运行依赖到 packages/<F>/<A>/debs/
 # 机制：apt-get install --reinstall --print-uris 解析递归依赖 → 下载全部 .deb

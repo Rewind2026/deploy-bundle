@@ -1,4 +1,3 @@
-id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
 # collect_tomcat.sh - 采集 Tomcat 9 tar.gz（硬性要求 9 系列，10.x/11.x 一律拒绝）
 

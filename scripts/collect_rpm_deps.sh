@@ -1,4 +1,3 @@
-id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
 # collect_rpm_deps.sh - 在 rpm 系镜像机上真实下载 MySQL 运行依赖到 packages/<F>/<A>/rpms/
 # 工具自适应：优先 dnf download --resolve（dnf-plugins-core），退化 repotrack（yum-utils）

@@ -1,4 +1,3 @@
-id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
 # installer.sh - deploy-bundle 主入口
 # 跨国产化 Linux 一键部署 MySQL 8 + Tomcat 9 + JDK 8

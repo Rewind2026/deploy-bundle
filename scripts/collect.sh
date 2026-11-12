@@ -1,4 +1,3 @@
-id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 #!/usr/bin/env bash
 # collect.sh - 一键采集入口
 # 聚合：JDK / MySQL 8.4.x（双 glibc）/ Tomcat 9 / 系统依赖（rpm 或 deb）
