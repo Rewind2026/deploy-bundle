@@ -1,3 +1,4 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 # 兼容性矩阵 (COMPATIBILITY.md)
 
 本表回答: 某个具体 OS 能不能用 deploy-bundle 部署？需要哪一份 family 的包？
@@ -45,7 +46,7 @@ Kylin/UOS 专项: `scripts/detect_kylin_uos.sh`。
 
 **认证插件双支持**:
 - `caching_sha2_password` (MySQL 8 默认)
-- `mysql_native_password` (老客户端兼容) — 创建 `admin@localhost` 后备账户
+- `mysql_native_password` (老客户端兼容) — 创建 `admin@localhost / admin@127.0.0.1 / admin@%` 后备账户（密码与 root 相同）
 
 **运行时依赖白名单**:
 - `rhel7-line`: libaio、numactl-libs、libnsl
@@ -117,8 +118,8 @@ Kylin/UOS 专项: `scripts/detect_kylin_uos.sh`。
 |------|--------|---------|------|
 | Adoptium Temurin 8 | OK | OK | collect_jdk.sh |
 | Apache Tomcat 9 | OK | OK | Java 与 arch 无关 |
-| MySQL 8 glibc2.28 | OK | OK (官方) | `mysql-8.0.36-linux-glibc2.28-aarch64.tar.xz` |
-| MySQL 8 glibc2.17 | OK | (官方未发布) | 缺失自动跳过 |
+| MySQL 8.4 glibc2.28 | OK | OK (官方) | `mysql-8.4.6-linux-glibc2.28-aarch64.tar.xz` |
+| MySQL 8.4 glibc2.17 | OK (官方) | (官方未发布) | 仅 x86_64；aarch64 一律走 glibc2.28 |
 
 | 步骤 | x86_64 | aarch64 | 备注 |
 |------|--------|---------|------|
@@ -202,6 +203,6 @@ bash scripts/healthcheck.sh
 | OS / 组件 | 现象 | 处理 |
 |----------|------|------|
 | openEuler 22.03 + Tomcat 启动阻塞 | jdk.u.random 熵不足 | 注入 `securerandom.source=file:/dev/./urandom` |
-| Kylin V10 SP1 + mariadb-libs | MySQL 8 安装冲突 | cleanup_old.sh 自动 dnf swap |
+| Kylin V10 SP1 + mariadb-libs | MySQL 8 安装冲突 | cleanup_old.sh 自动 `rpm -e --nodeps` 卸载（不连带卸 postfix/cronie） |
 | UOS 1050 + MySQL 8 初始化慢 | 缺 libaio1 | collect_deb_deps 自动打包 |
 | RHEL 9 + 老 war 应用 | JDK 8u321+ 移除 3DES | java.security 补丁已注入 |

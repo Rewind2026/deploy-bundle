@@ -1,3 +1,4 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 # PRD - 国产化 Linux 离线中间件一键交付工具
 
 > **Status:** Draft v1.0
@@ -7,7 +8,8 @@
 
 为客户提供一份"开箱即用、完全离线、跨国产化 Linux 主流发行版"的中间件交付包，
 使现场实施人员无需在客户服务器上编写或调试任何命令，即可在 30 分钟内完成
-MySQL 8 + Tomcat 9 + JDK 8 的标准化部署。
+MySQL 8.4 LTS + Tomcat 9 + JDK 8 的标准化部署。
+版本硬性要求：MySQL 必须 8.4.x，Tomcat 必须 9 系列，不满足则采集/安装阶段直接拒绝。
 
 ## 2. Problem Statement
 
@@ -29,7 +31,7 @@ MySQL 8 + Tomcat 9 + JDK 8 的标准化部署。
 - **G3 跨发行版**：覆盖 5+ 系统族
 - **G4 跨架构**：x86_64 + aarch64
 - **G5 安全部署**：SELinux/AppArmor/firewalld 最小放宽
-- **G6 兼容性强**：JDK 8u481 / Tomcat 9 / MySQL 8 全栈兼容
+- **G6 兼容性强**：JDK 8u481 / Tomcat 9 / MySQL 8.4 LTS 全栈兼容
 - **G7 幂等可回滚**
 - **G8 健康检查**：端口/进程/select 1/Tomcat 200
 

@@ -1,3 +1,4 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 # FAQ (常见问题)
 
 ## Q0: deploy-bundle 的部署流程是什么? 是要先打包还是直接部署?
@@ -23,9 +24,11 @@ A: bundle 本身离线自包含。常见传输：U盘 / 内网跳板机 SCP / �
 A: MySQL / Tomcat / JDK 全部用通用二进制 tar.xz 安装。唯一用 RPM/DEB 的是运行时依赖 (libaio / numactl)，
 且两套都备：`packages/<family>/<arch>/rpms/` (rhel/openeuler) 或 `debs/` (deb)。
 
-## Q3: 客户已有 mariadb-libs (PostgreSQL 依赖)
+## Q3: 客户已有 mariadb-libs / mariadb-server / 系统自带 JDK
 
-A: `cleanup_old.sh` 检测到 `mariadb-libs` 时默认保留，并询问是否执行 `dnf swap mariadb-libs mysql-community-libs`。
+A: 按"新系统部署"原则全部卸载干净：系统自带 JDK（含 1.8.x）与 MariaDB/MySQL 各包自动卸载；
+mariadb-libs 用 `rpm -e --nodeps` 单包卸载（不连带卸载 postfix/cronie 等 libmysqlclient 依赖者，
+tar 包版 MySQL 自带 libmysqlclient，不需要系统的）。旧数据目录搬入备份目录后重新初始化。
 
 ## Q4: 客户不允许执行 dnf/yum
 
@@ -54,12 +57,15 @@ A: precheck 扫描 `/opt /usr/local /etc/systemd/system` 下的 JAVA_HOME 引用
 
 ## Q10: MySQL 8 caching_sha2_password 老客户端不兼容
 
-A: 已创建 `admin@localhost` 后备账户（mysql_native_password）。Navicat 11 之前用 admin 登录。
-强制：编辑 `configs/my.cnf.template` 加 `default_authentication_plugin=mysql_native_password`。
+A: 已创建 `admin@localhost / admin@127.0.0.1 / admin@%`（mysql_native_password）后备账户。
+Navicat 11 等老客户端用 admin 登录（密码与 root 相同，默认 `ywj02402570687`）。
+强制全局：编辑 `configs/my.cnf.template` 加 `default_authentication_plugin=mysql_native_password`。
 
 ## Q11: Tomcat 启动后 8080 报 403/404
 
-A: deploy-bundle 默认清空 Tomcat 自带 webapps。需部署应用：`sudo cp /path/to/ROOT.war /var/lib/tomcat/webapps/`。
+A: deploy-bundle 默认清空 Tomcat 自带 webapps。业务应用统一走：
+`sudo cp your-app.war /opt/deploy-bundle/app/war/ && sudo bash installer.sh --only=app`
+（自动建 nkw 库 → 导入 app/sql/*.sql → 解压 WAR 到 webapps/ROOT → 重启 tomcat）。
 
 ## Q12: 客户 glibc 是 2.23
 
@@ -128,12 +134,14 @@ tar czf deploy-bundle-v1.0-rhel8-x86_64.tar.gz /opt/deploy-bundle
 
 ## Q25: JDK / MySQL / Tomcat 想升级版本号
 
-A: 在镜像机重新跑 collect.sh，指定版本号:
+A: 在镜像机重新跑采集。MySQL/Tomcat 小版本可用环境变量覆盖
+（仍必须满足硬性要求：MySQL 8.4.x、Tomcat 9 系列）:
 ```bash
-sudo bash scripts/collect.sh --family=rhel8-line --arch=x86_64 --jdk=8u512
-sudo bash scripts/collect.sh --family=rhel8-line --arch=x86_64 --mysql=8.0.42
-sudo bash scripts/collect.sh --family=rhel8-line --arch=x86_64 --tomcat=9.0.95
+sudo TARGET_FAMILY=rhel8-line TARGET_ARCH=x86_64 \
+    MYSQL_VERSION=8.4.6 TOMCAT_VERSION=9.0.95 \
+    bash scripts/collect.sh
 ```
+本地预放的 tarball 若不符合 8.4.x / 9.x，采集会直接报错退出。
 
 ## Q26: 客户机 family 不在镜像机清单里 (Anolis 23、openEuler 24.03)
 

@@ -1,3 +1,4 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 # 运维手册
 
 部署完成后的日常运维操作。
@@ -38,15 +39,25 @@ cat /var/lib/mysql/.root_password
 
 格式:
 ```
-root@localhost (caching_sha2): <20位随机密码>
-admin@localhost (mysql_native_password): <20位随机密码>
+root@localhost (caching_sha2): <密码>
+root@% (caching_sha2, 远程): <密码>
+admin@localhost (mysql_native_password): <密码>
+admin@127.0.0.1 (mysql_native_password): <密码>
+admin@% (mysql_native_password, 远程): <密码>
 ```
+
+密码默认为交付约定固定值 **`ywj02402570687`**（`installer.sh --mysql-password=PW` 可在部署时覆盖），
+root/admin 同密码；远程访问已默认开启（bind-address=0.0.0.0，root@% 为 caching_sha2_password，
+admin@% 为 mysql_native_password 兼容老客户端）。
+交付后建议尽快改为各机器独立密码（见 2.2）。
 
 ### 2.2 改密码
 
 ```sql
 ALTER USER 'root'@'localhost' IDENTIFIED BY 'NewStrongPass123!';
+ALTER USER 'root'@'%' IDENTIFIED BY 'NewStrongPass123!';
 ALTER USER 'admin'@'localhost' IDENTIFIED BY 'NewStrongPass456!';
+ALTER USER 'admin'@'%' IDENTIFIED BY 'NewStrongPass456!';
 FLUSH PRIVILEGES;
 ```
 
@@ -80,31 +91,36 @@ sudo tail -f /var/lib/mysql/slow.log
 
 ## 3. Tomcat 运维
 
-### 3.1 应用部署
+### 3.1 应用部署（标准方式）
 
 ```bash
-sudo systemctl stop tomcat
-sudo cp /path/to/ROOT.war /var/lib/tomcat/webapps/
-sudo systemctl start tomcat
+# 推荐：走 deploy-bundle 应用部署流程（自动建库/导入/解压/重启）
+sudo cp your-app.war /opt/deploy-bundle/app/war/
+sudo bash /opt/deploy-bundle/installer.sh --only=app
 sudo tail -f /opt/tomcat/logs/catalina.out
 ```
 
-### 3.2 内存调整
-
-编辑 `configs/tomcat.service` 中的 `JVM_HEAP_SIZE` 或:
+手工方式（不推荐，注意 appBase 在 deb 系是 /var/lib/tomcat/webapps，其余是 /var/lib/tomcats/webapps）：
 ```bash
-sudo systemctl edit tomcat
+sudo systemctl stop tomcat
+sudo cp /path/to/ROOT.war /var/lib/tomcats/webapps/
+sudo systemctl start tomcat
 ```
 
-添加:
-```ini
-[Service]
-Environment="CATALINA_OPTS=-Xms1g -Xmx1g"
-```
+### 3.2 优雅停机说明
 
-然后:
+`tomcat.service` 的 ExecStop 调用 `/opt/tomcat/bin/tomcat-stop.sh`：
+发送 SHUTDOWN 后最多等 60 秒（`TOMCAT_STOP_WAIT` 环境变量可调），超时才强杀。
+ catalina.sh 原生 stop 硬编码只等 5 秒，偏重的 Spring 应用停不干净。
+context.xml 已注入 `clearReferencesStopThreads/StopTimerThreads`，应用泄漏的
+非守护线程（如 mysql-cj abandoned-connection-cleanup）由 Tomcat 停止时回收。
+若 restart 仍偶发 60s+，是应用自身未注册 shutdown hook，属应用代码问题。
+
+### 3.3 内存调整
+
+JVM 参数写在 `/opt/tomcat/bin/setenv.sh`（默认 `-Xms1024M -Xmx4096M` + G1GC），直接编辑：
 ```bash
-sudo systemctl daemon-reload
+sudo vi /opt/tomcat/bin/setenv.sh
 sudo systemctl restart tomcat
 ```
 

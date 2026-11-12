@@ -1,3 +1,4 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 # INSTALL.md - 客户现场离线部署 5 步上手
 
 > 目标读者：客户现场实施人员 / DBA / 运维
@@ -58,12 +59,13 @@ sudo bash installer.sh --auto
 
 执行流程（按顺序跑 7 个 stage）：
 1. **detect** — 环境探测（同 dry-run）
-2. **cleanup** — 检查并卸载旧版本 JDK/MySQL/Tomcat（保留 mariadb-libs 防 PG 破坏）
+2. **cleanup** — 按"新系统部署"原则清理：系统自带 JDK（**含 1.8.x**）、MariaDB、MySQL（含仓库版 mysql-community）全部卸载；mariadb-libs 用 `rpm -e --nodeps` 单包卸载（不连带卸载 postfix/cronie 等依赖者）；旧 MySQL/MariaDB 数据目录搬入备份目录。重复部署时自动停用本工具注册的 mysqld/tomcat（数据目录保留）
 3. **install** — 解包三组件、创建 mysql 用户、初始化数据目录、写 systemd unit
 4. **selinux** — 仅放松 `mysqld_t` / `tomcat_t` 域（全局仍 enforcing）
-5. **firewall** — 打开 3306 / 8080 端口
+5. **firewall** — 永久关闭防火墙（现场改 Tomcat 端口无需再放行；--skip-firewall 可跳过）
 6. **systemd_register** — 写 `/etc/systemd/system/{mysqld,tomcat}.service` + enable + start
-7. **healthcheck** — 14+ 项端口/进程/select/Tomcat 200 检查
+7. **deploy_app** — 自动建 nkw 库（utf8mb3_general_ci）+ 导入 `app/sql/*.sql` + 解压 `app/war/*.war` 到 webapps/ROOT + 重启 tomcat（--skip-app 可跳过）
+8. **healthcheck** — 14+ 项端口/进程/select/Tomcat 200 检查
 
 ---
 
@@ -77,31 +79,43 @@ cat /var/log/installer_health_*.txt
 ss -ltn | grep -E ':(3306|8080)'
 
 # 3. MySQL 测试
-mysql -u root -p
-# 输入 /var/lib/mysql/.root_password 文件里的密码（mysql:mysql 0600）
+mysql -u admin -p
+# 默认固定密码：ywj02402570687（root/admin 同密码，--mysql-password=PW 可覆盖）
+# 同时记录在 /var/lib/mysql/.root_password（mysql:mysql 0600）
 mysql> SELECT VERSION();
 
-# 4. Tomcat 测试
+# 4. 远程访问（默认已开启：bind-address=0.0.0.0 + root@% / admin@%）
+# 老客户端（Navicat 11 等）用 admin 账号（mysql_native_password）；
+# root 是 caching_sha2_password，需新版客户端/驱动
+
+# 5. Tomcat 测试
 curl -I http://localhost:8080/
-# 应返回 HTTP/1.1 200 或 404（无 ROOT.war 时正常）
+# 应返回 HTTP/1.1 200（部署了 app/war 下应用后）
 ```
 
 ---
 
 ## 4. 部署业务应用
 
-```bash
-# 把 war 包放到 Tomcat appBase（默认 /var/lib/tomcat/webapps；rhel 系 /var/lib/tomcats/webapps）
-sudo cp your-app.war /var/lib/tomcat/webapps/
-sudo systemctl restart tomcat
+**部署时只需把文件放到指定目录，脚本自动完成建库 / 导入 / 解压 / 重启：**
 
-# 创建业务数据库
-mysql -u root -p
-mysql> CREATE DATABASE your_app DEFAULT CHARSET utf8mb4;
-mysql> CREATE USER 'appuser'@'localhost' IDENTIFIED WITH mysql_native_password BY 'your_password';
-mysql> GRANT ALL ON your_app.* TO 'appuser'@'localhost';
-mysql> FLUSH PRIVILEGES;
+```bash
+# 1) SQL 文件按文件名顺序导入（放这里）
+sudo cp your-dump.sql /opt/deploy-bundle/app/sql/
+
+# 2) WAR 包解压到 webapps/ROOT（放这里）
+sudo cp your-app.war /opt/deploy-bundle/app/war/
+
+# 3) 执行应用部署（自动：创建 nkw 库 utf8mb3_general_ci → 导入 SQL →
+#    解压 WAR → 重启 tomcat → 验证）
+sudo bash /opt/deploy-bundle/installer.sh --only=app
 ```
+
+行为细节：
+- SQL 导入使用 `--force` 容忍 dump 自带的 `CREATE DATABASE/USE` 语句
+- nkw 库已存在表时**跳过导入**（幂等；需重导请先清空该库）
+- WAR 重复部署自动备份旧版本到 `/opt/deploy-bundle-backups/`
+- 连接 MySQL 最多等待 120 秒（systemd active 后端口可能还没 ready）
 
 ---
 
@@ -180,9 +194,18 @@ A: 默认 root 用 `caching_sha2_password`，Navicat 11 不支持。**用脚本�
 
 A: 已写入 `configs/java.security` 兼容补丁。客户业务用老 SSL 也能通。
 
-### Q4. 客户机器已有 MariaDB
+### Q4. 客户机器已有 MariaDB / 系统自带 JDK
 
-A: 脚本会扫描并警告，`cleanup_old.sh` 默认保留 `mariadb-libs`（防止破坏其他 RPM），只覆盖 mysql 二进制。
+A: 按"新系统部署"原则全部卸载干净：系统自带 JDK（**含 1.8.x**，只保留 `/opt/jdk`）、
+mariadb-server/mysql-server/仓库版 mysql-community 自动卸载；mariadb-libs 用
+`rpm -e --nodeps` 单包卸载（不破坏 postfix/cronie 等依赖者）；旧数据目录搬入
+`/opt/deploy-bundle-backups/` 后重新初始化。重复部署时本工具自己的 mysqld/tomcat
+自动停用重装，**MySQL 8.0+ 数据目录（含 mysql.ibd）保留复用**，业务数据不丢。
+
+### Q4b. 重复在同一台机器上跑 installer 会不会丢数据？
+
+A: 不会。数据目录含 `mysql.ibd`（MySQL 8.0+ 特征）即保留复用，nkw 业务库原样保留；
+只有旧版 MySQL/MariaDB 的数据目录（与 8.4 系统表不兼容）才会搬走重建。
 
 ### Q5. SELinux 不让启动 MySQL
 

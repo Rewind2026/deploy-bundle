@@ -1,3 +1,4 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 # Plan - 国产化 Linux 离线中间件交付工具 实施计划
 
 > **Date:** 2026-09-28
@@ -82,7 +83,7 @@
 - SELinux 全局仍 enforcing
 - 仅 mysqld_t / tomcat_t permissive
 - 仅 3306/8080 端口
-- 保留 mariadb-libs
+- mariadb-libs：早期方案为 dnf swap；现按"新系统部署"原则改为 `rpm -e --nodeps` 直接卸载
 - 临时密码 600 权限
 
 ## 4. Dependencies
@@ -108,7 +109,7 @@
 | 风险 | 等级 | 缓解 |
 |------|------|------|
 | CPU 指令缺失 | 中 | precheck 告警 |
-| mariadb-libs 依赖 | 高 | dnf swap |
+| mariadb-libs 依赖 | 高 | `rpm -e --nodeps` 单包卸载（早期方案 dnf swap 已废弃） |
 | SELinux 自定义模块被驳回 | 中 | 仅 permissive 域 |
 | caching_sha2 客户端不兼容 | 中 | admin 备用账号 |
 | Tomcat 9 EOL 2027-03-31 | 中 | v2 迁移到 Tomcat 10 |
@@ -117,7 +118,7 @@
 ## 6. v2 Roadmap
 
 - v2.0: aarch64 深度适配 + loongarch64
-- v2.1: MySQL 8.4 LTS
+- v2.1: MySQL 8.4 LTS（已提前落地：v1.x 即硬性要求 8.4.x，见 collect_mysql.sh / install_mysql.sh）
 - v2.2: Tomcat 10
 - v2.3: Ansible AWX 集成
 - v2.4: 国产中间件替换路径

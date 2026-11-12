@@ -1,7 +1,8 @@
+id: /root/.trae-cn-server/bin/stable-d654d294a690adb43b5bb35d5b37adf9f292cee0-debian10/modules/ai-agent/libselinux.so.1: no version information available (required by id)
 # COLLECT_PLANNING.md - 镜像机选型与离线包构建指南
 
 > 目标读者: 交付方/实施方的打包工程师
-> 用途: 在公司内网**有外网的镜像机**上，把 MySQL 8 + Tomcat 9 + JDK 8 + 系统依赖
+> 用途: 在公司内网**有外网的镜像机**上，把 MySQL 8.4 LTS + Tomcat 9 + JDK 8 + 系统依赖
 > 打成一个能离线拷贝的 deploy-bundle 包，再交到客户现场。
 
 ## 1. 总流程
@@ -101,7 +102,7 @@ sudo bash scripts/collect.sh --family=rhel8-line --arch=x86_64 --dry-run
 sudo bash scripts/collect.sh --family=rhel8-line --arch=x86_64
 # 输出:
 #   packages/rhel8-line/x86_64/jdk/OpenJDK8U-jdk_x64_linux_hotspot_8u504-b01.tar.gz  (99MB)
-#   packages/rhel8-line/x86_64/mysql/mysql-8.0.36-linux-glibc2.28-x86_64.tar.xz      (400MB)
+#   packages/rhel8-line/x86_64/mysql/mysql-8.4.6-linux-glibc2.28-x86_64.tar.xz      (400MB)
 #   packages/rhel8-line/x86_64/tomcat/apache-tomcat-9.0.91.tar.gz                   (12MB)
 #   packages/rhel8-line/x86_64/rpms/libaio-*.rpm                                     (60MB)
 #   LICENSES/
@@ -141,8 +142,8 @@ deploy-bundle-v1.0-rhel8-x86_64.tar.gz            # 一个 family + arch ≈ 1.0
 │           ├── jdk/
 │           │   └── OpenJDK8U-jdk_x64_linux_hotspot_8u504-b01.tar.gz
 │           ├── mysql/
-│           │   ├── mysql-8.0.36-linux-glibc2.28-x86_64.tar.xz
-│           │   └── mysql-8.0.36-linux-glibc2.17-x86_64.tar.xz
+│           │   ├── mysql-8.4.6-linux-glibc2.28-x86_64.tar.xz
+│           │   └── mysql-8.4.6-linux-glibc2.17-x86_64.tar.xz
 │           ├── tomcat/
 │           │   └── apache-tomcat-9.0.91.tar.gz
 │           ├── rpms/
