@@ -68,7 +68,8 @@ section "2. installer.sh 入口"
 out="$(bash installer.sh --help 2>&1)"
 assert "installer.sh --help 输出'用法'" "echo '${out}' | grep -q '用法'"
 out="$(bash installer.sh --version 2>&1)"
-assert "installer.sh --version 输出 1.0.0" "echo '${out}' | grep -q '1.0.0'"
+expected_ver="$(head -1 VERSION | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+assert "installer.sh --version 输出 ${expected_ver}" "echo '${out}' | grep -q '${expected_ver}'"
 out="$(bash installer.sh --invalid 2>&1)"; rc=$?
 assert "installer.sh --invalid 拒绝（exit 1）" "[[ ${rc} -eq 1 ]]"
 
