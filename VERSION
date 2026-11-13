@@ -1,6 +1,6 @@
-deploy-bundle 1.1.3
+deploy-bundle 1.1.4
 build: 2026-11-13
 target: MySQL 8.4.x + Tomcat 9.x + JDK 1.8.x
-note: tomcat.service 增加 MySQL 就绪门（wait-for-mysql.sh）；installer 预读已有 env 文件的端口/密码作为默认值，部署前手工改 /opt/deploy-bundle.env 即可生效（CLI 参数优先）
+note: 修复 systemd_register 遗漏 tomcat.service 中 __MYSQL_PORT__ 替换（实测 Kylin V11 就绪门因占位符未替换阻塞 90s 被 systemd 超时）；tomcat.service 增加 TimeoutStartSec=320 兜底低配机器首次 MySQL 初始化；collect_jdk/precheck 修复 pipefail 下 grep 无匹配中断脚本
 scope: Kylin V10/V11（服务器版+桌面版）, UOS 1050/1070, openEuler 20.03/22.03/24.03, Anolis OS 8/23
 archs: x86_64, aarch64 (loongarch64 removed)
