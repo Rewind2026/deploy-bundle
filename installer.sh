@@ -169,6 +169,13 @@ usage() {
 }
 
 parse_args() {
+    # 预读已有 env 文件中的可调参数作为默认值（显式 CLI 参数仍会覆盖）。
+    # 这样"采集后、部署前手工编辑 /opt/deploy-bundle.env 修改端口/密码"
+    # 的工作流是生效的：installer 重写 env 文件时沿用你改过的值。
+    if [[ -f "${ENV_FILE}" ]]; then
+        # shellcheck disable=SC1091
+        source <(grep -E '^(MYSQL_PORT|MYSQL_ROOT_PW|TOMCAT_PORT)=' "${ENV_FILE}" 2>/dev/null) || true
+    fi
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --auto)        MODE="auto" ;;
