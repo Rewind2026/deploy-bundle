@@ -80,12 +80,18 @@ detect_os() {
     else
         case "${OS_ID}" in
             kylin)
-                # 与 detect_kylin_uos.sh / lib.sh 对齐：V10 基线（含最常见的 SP1）glibc 2.17
-                case "${OS_VERSION}" in
-                    V10*)      OS_FAMILY="rhel7-line" ;;
-                    V11*)      OS_FAMILY="openeuler-line" ;;
-                    *)         OS_FAMILY="rhel8-line" ;;
-                esac ;;
+                # 麒麟桌面版是 deb 系（apt/dpkg，无 yum/dnf），服务器版是 rpm 系
+                if command -v dpkg >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1 \
+                   && ! command -v dnf >/dev/null 2>&1 && ! command -v yum >/dev/null 2>&1; then
+                    OS_FAMILY="deb-line"
+                else
+                    # 与 detect_kylin_uos.sh / lib.sh 对齐：V10 基线（含最常见的 SP1）glibc 2.17
+                    case "${OS_VERSION}" in
+                        V10*)      OS_FAMILY="rhel7-line" ;;
+                        V11*)      OS_FAMILY="openeuler-line" ;;
+                        *)         OS_FAMILY="rhel8-line" ;;
+                    esac
+                fi ;;
             uniontech|uos)
                 case "${OS_VERSION}" in
                     20*|1050*|1060*|1070*)
