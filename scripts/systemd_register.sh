@@ -83,6 +83,7 @@ if [[ "${SKIP_TOMCAT}" -eq 0 ]]; then
             -e "s|__TOMCAT_USER__|tomcat|g" \
             -e "s|__TOMCAT_GROUP__|tomcat|g" \
             -e "s|__TOMCAT_APP_BASE__|${APP_BASE}|g" \
+            -e "s|__MYSQL_PORT__|${MYSQL_PORT:-3306}|g" \
             "${CFG_DIR}/tomcat.service" > "${SVC}"
         chmod 644 "${SVC}"
     fi
