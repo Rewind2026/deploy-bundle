@@ -140,10 +140,11 @@ detect_glibc() {
     if command -v ldd >/dev/null 2>&1; then
         local line
         line="$(ldd --version 2>&1 | head -n1)"
-        GLIBC_VERSION="$(echo "${line}" | grep -oE '[0-9]+\.[0-9]+' | head -n1)"
+        GLIBC_VERSION="$(echo "${line}" | grep -oE '[0-9]+\.[0-9]+' | head -n1 || true)"
     fi
     if [[ -z "${GLIBC_VERSION}" && -f /lib64/libc.so.6 ]]; then
-        GLIBC_VERSION="$(/lib64/libc.so.6 2>&1 | head -n1 | grep -oE '[0-9]+\.[0-9]+' | head -n1)"
+        # || true：grep 无匹配在 pipefail 下会触发 set -e 中断整个 precheck
+        GLIBC_VERSION="$(/lib64/libc.so.6 2>&1 | head -n1 | grep -oE '[0-9]+\.[0-9]+' | head -n1 || true)"
     fi
     if [[ -z "${GLIBC_VERSION}" ]]; then
         GLIBC_VERSION="2.17"
