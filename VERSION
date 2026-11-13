@@ -1,5 +1,6 @@
-deploy-bundle 1.1.2
+deploy-bundle 1.1.3
 build: 2026-11-13
 target: MySQL 8.4.x + Tomcat 9.x + JDK 1.8.x
+note: tomcat.service 增加 MySQL 就绪门（wait-for-mysql.sh），等 MySQL 端口可连后再启动 Tomcat
 scope: Kylin V10/V11（服务器版+桌面版）, UOS 1050/1070, openEuler 20.03/22.03/24.03, Anolis OS 8/23
 archs: x86_64, aarch64 (loongarch64 removed)
