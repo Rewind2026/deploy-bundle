@@ -1,5 +1,5 @@
 # tomcat.service - Tomcat 9 systemd unit（Type=forking + catalina.sh）
-# 占位符：__CATALINA_HOME__ __JAVA_HOME__ __TOMCAT_USER__ __TOMCAT_GROUP__ __TOMCAT_APP_BASE__
+# 占位符：__CATALINA_HOME__ __JAVA_HOME__ __TOMCAT_USER__ __TOMCAT_GROUP__ __TOMCAT_APP_BASE__ __MYSQL_PORT__
 # 说明：
 # 1. Type=forking：catalina.sh start 会把 JVM 后台 fork，并把 PID 写入 CATALINA_PID
 #    指向的文件，systemd 通过 PIDFile 跟踪真正的 Tomcat JVM 进程。
@@ -28,6 +28,13 @@ Environment=JRE_HOME=__JAVA_HOME__/jre
 
 ExecStartPre=/usr/bin/install -d -o __TOMCAT_USER__ -g __TOMCAT_GROUP__ -m 0755 \
     __CATALINA_HOME__/temp __CATALINA_HOME__/work __CATALINA_HOME__/logs __TOMCAT_APP_BASE__
+
+# === MySQL 就绪门 ===
+# mysqld 为 Type=simple，After=mysqld.service 仅保证启动顺序，
+# 不保证 InnoDB 初始化完成、端口可连。此处阻塞等待 MySQL 端口就绪后再
+# 拉起 Tomcat，避免应用因数据库未就绪而启动失败。
+# 超时上限可通过 Environment=WAIT_FOR_MYSQL_TIMEOUT=<秒> 覆盖（默认 300s）
+ExecStartPre=/bin/bash __CATALINA_HOME__/bin/wait-for-mysql.sh __MYSQL_PORT__
 
 # catalina.sh start：后台 fork JVM → 写入 CATALINA_PID → 脚本退出
 ExecStart=/bin/bash __CATALINA_HOME__/bin/catalina.sh start
