@@ -1,1 +1,289 @@
-{"output":"1\t#!/usr/bin/env bash\n2\t# install_tomcat.sh - Tomcat 9 离线部署\n3\t\n4\tset -Eeuo pipefail\n5\tSCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"\n6\tsource \"${SCRIPT_DIR}/lib.sh\"\n7\t# 读取 installer.sh 写入的参数（TOMCAT_PORT / TOMCAT_APP_BASE 等）\n8\t[[ -f /opt/deploy-bundle.env ]] && source /opt/deploy-bundle.env || true\n9\t\n10\tstage_begin \"install_tomcat\"\n11\trequire_detect\n12\trequire_root\n13\t\n14\tFAMILY=\"$(os_family)\"\n15\tARCH_VAL=\"$(arch)\"\n16\t\n17\t[[ -x \"${TARGET_JDK_DIR}/bin/java\" ]] || die \"${EX_DEPS}\" \"JDK 未安装，请先运行 install_jdk.sh\"\n18\t\n19\tselect_tomcat_tar() {\n20\t    local pkgs_dir=\"${PKG_DIR}/${FAMILY}/${ARCH_VAL}\"\n21\t    [[ -d \"${pkgs_dir}\" ]] || die \"${EX_DEPS}\" \"包目录不存在：${pkgs_dir}\"\n22\t\n23\t    # 首选 tomcat 子目录内的任意 tar.gz/zip——不要求文件名带版本号，\n24\t    # 现场可能投喂 tomcat.zip、tomcat-test.tar.gz 等任意名字，版本以包内容为准\n25\t    local found\n26\t    if [[ -d \"${pkgs_dir}/tomcat\" ]]; then\n27\t        found=\"$(find \"${pkgs_dir}/tomcat\" -maxdepth 1 -type f \\\n28\t            \\( -name '*.tar.gz' -o -name '*.tgz' -o -name '*.zip' \\) -size +5M 2>/dev/null | head -n1 || true)\"\n29\t        [[ -n \"${found}\" && -f \"${found}\" ]] && { echo \"${found}\"; return 0; }\n30\t    fi\n31\t    # 兼容：直接放在 packages/<family>/<arch>/ 下的规范命名包\n32\t    local patterns=(\n33\t        \"apache-tomcat-9.0.*\"\n34\t        \"apache-tomcat-9.\"\n35\t        \"tomcat-9.\"\n36\t    )\n37\t    for pat in \"${patterns[@]}\"; do\n38\t        found=\"$(find \"${pkgs_dir}\" -maxdepth 2 -type f \\\n39\t            \\( -name \"${pat}*.tar.gz\" -o -name \"${pat}*.zip\" \\) 2>/dev/null | head -n1 || true)\"\n40\t        [[ -n \"${found}\" && -f \"${found}\" ]] && { echo \"${found}\"; return 0; }\n41\t    done\n42\t    return 1\n43\t}\n44\t\n45\tTOMCAT_TAR=\"$(select_tomcat_tar || true)\"\n46\tif [[ -z \"${TOMCAT_TAR}\" || ! -f \"${TOMCAT_TAR}\" ]]; then\n47\t    die \"${EX_DEPS}\" \"未在 packages/${FAMILY}/${ARCH_VAL}/ 找到 Tomcat 9 归档包（tar.gz/zip）\"\n48\tfi\n49\tinfo \"选中 Tomcat 包：${TOMCAT_TAR}\"\n50\t\n51\t# 硬性版本守卫：Tomcat 必须 9 系列——以包内容（顶层目录）为准，文件名任意。\n52\t# 同一台机器投喂不同小版本（如 9.0.91 -> 9.0.132）无需改任何配置。\n53\tTOMCAT_TOP=\"$(archive_top_entry \"${TOMCAT_TAR}\")\"\n54\tTOMCAT_TOP=\"${TOMCAT_TOP#./}\"\n55\tcase \"${TOMCAT_TOP}\" in\n56\t    apache-tomcat-9.*|tomcat-9.*) : ;;\n57\t    *) die \"${EX_DEPS}\" \"Tomcat 硬性要求 9 系列（包内容顶层目录：${TOMCAT_TOP:-无法识别}），实际文件：$(basename \"${TOMCAT_TAR}\")，拒绝安装\" ;;\n58\tesac\n59\tTOMCAT_VER=\"$(printf '%s' \"${TOMCAT_TOP}\" | grep -oE '9\\.[0-9]+(\\.[0-9]+)?' | head -n1 || true)\"\n60\tinfo \"Tomcat 包内实际版本：${TOMCAT_VER:-未知}\"\n61\t\n62\tif [[ -e \"${TARGET_TOMCAT_DIR}\" && ! -L \"${TARGET_TOMCAT_DIR}\" ]]; then\n63\t    BACKUP_DIR=\"$(ensure_backup_dir tomcat_existing)\"\n64\t    warn \"备份 ${TARGET_TOMCAT_DIR} -> ${BACKUP_DIR}/tomcat\"\n65\t    if ! is_dry_run; then\n66\t        cp -a \"${TARGET_TOMCAT_DIR}\" \"${BACKUP_DIR}/tomcat\" || die \"${EX_SYS}\" \"备份失败\"\n67\t    fi\n68\tfi\n69\t\n70\tif [[ -L \"${TARGET_TOMCAT_DIR}\" ]]; then run rm -f \"${TARGET_TOMCAT_DIR}\"; fi\n71\tmkdir -p \"${TARGET_TOMCAT_DIR}\"\n72\tinfo \"解压 ${TOMCAT_TAR} -> ${TARGET_TOMCAT_DIR}\"\n73\tcase \"${TOMCAT_TAR}\" in\n74\t    *.zip)\n75\t        # tar 解不了 zip；unzip 未安装时用 python3 兜底（RPM 系 dnf 依赖 python3，几乎必装）。\n76\t        # unzip 无 --strip-components，先解到临时目录再按顶层目录平移。\n77\t        if is_dry_run; then\n78\t            echo \"[DRY-RUN] 解压 ${TOMCAT_TAR} -> 临时目录并平移至 ${TARGET_TOMCAT_DIR}\"\n79\t        else\n80\t            _tmpd=\"$(mktemp -d \"${TARGET_TOMCAT_DIR}/.unzip.XXXXXX\")\"\n81\t            if have_cmd unzip; then\n82\t                unzip -q \"${TOMCAT_TAR}\" -d \"${_tmpd}\" || { rm -rf \"${_tmpd}\"; die \"${EX_SYS}\" \"zip 解压失败\"; }\n83\t            elif have_cmd python3; then\n84\t                # python3 zipfile.extractall 会按 zip 内记录的 unix 权限恢复（Apache 官方 zip 均保留），\n85\t                # 保险起见解压后对 bin/*.sh 显式恢复执行位，防止权限丢失导致 catalina.sh 无法执行\n86\t                python3 -c 'import sys, zipfile\n87\tzipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' \"${TOMCAT_TAR}\" \"${_tmpd}\" \\\n88\t                    || { rm -rf \"${_tmpd}\"; die \"${EX_SYS}\" \"zip 解压失败（python3）\"; }\n89\t            else\n90\t                rm -rf \"${_tmpd}\"\n91\t                die \"${EX_DEPS}\" \"目标机缺少 unzip/python3，无法解压 .zip 包；离线环境请优先投喂 tar.gz（采集机可用 tar -czf 重制）\"\n92\t            fi\n93\t            _top=\"${TOMCAT_TOP}\"\n94\t            if [[ ! -d \"${_tmpd}/${_top}\" ]]; then\n95\t                _top=\"$(find \"${_tmpd}\" -mindepth 1 -maxdepth 1 -type d | head -n1)\"\n96\t            fi\n97\t            if [[ -n \"${_top}\" && -d \"${_tmpd}/${_top}\" ]]; then\n98\t                cp -a \"${_tmpd}/${_top}/.\" \"${TARGET_TOMCAT_DIR}/\"\n99\t            else\n100\t                # zip 内无顶层目录（文件直接在根），整体平移\n101\t                cp -a \"${_tmpd}/.\" \"${TARGET_TOMCAT_DIR}/\"\n102\t            fi\n103\t            find \"${TARGET_TOMCAT_DIR}/bin\" -name '*.sh' -exec chmod 755 {} + 2>/dev/null || true\n104\t            rm -rf \"${_tmpd}\"\n105\t        fi\n106\t        ;;\n107\t    *)\n108\t        run tar -xf \"${TOMCAT_TAR}\" -C \"${TARGET_TOMCAT_DIR}\" --strip-components=1\n109\t        ;;\n110\tesac\n111\t\n112\t[[ -x \"${TARGET_TOMCAT_DIR}/bin/catalina.sh\" ]] || die \"${EX_SYS}\" \"Tomcat 解压后未找到 catalina.sh\"\n113\t\n114\tif ! getent group tomcat >/dev/null 2>&1; then\n115\t    if is_dry_run; then echo \"[DRY-RUN] groupadd -r tomcat\"\n116\t    else groupadd -r tomcat || die \"${EX_SYS}\" \"groupadd tomcat 失败\"; fi\n117\tfi\n118\tif ! getent passwd tomcat >/dev/null 2>&1; then\n119\t    if is_dry_run; then echo \"[DRY-RUN] useradd -r -g tomcat -d ${TARGET_TOMCAT_DIR} -s /sbin/nologin tomcat\"\n120\t    else useradd -r -g tomcat -d \"${TARGET_TOMCAT_DIR}\" -s /sbin/nologin tomcat \\\n121\t        || die \"${EX_SYS}\" \"useradd tomcat 失败\"; fi\n122\tfi\n123\t\n124\tSERVER_XML=\"${TARGET_TOMCAT_DIR}/conf/server.xml\"\n125\tif [[ ! -f \"${CFG_DIR}/server.xml.template\" ]]; then\n126\t    die \"${EX_DEPS}\" \"缺少 server.xml.template\"\n127\tfi\n128\t\n129\tTOTAL_MEM_MB=\"$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 2048)\"\n130\tif [[ \"${TOTAL_MEM_MB}\" -lt 2048 ]]; then\n131\t    MAX_THREADS=200\n132\telif [[ \"${TOTAL_MEM_MB}\" -lt 8192 ]]; then\n133\t    MAX_THREADS=400\n134\telse\n135\t    MAX_THREADS=800\n136\tfi\n137\tinfo \"Tomcat maxThreads=${MAX_THREADS}（系统内存 ${TOTAL_MEM_MB}M）\"\n138\t\n139\tcase \"${FAMILY}\" in\n140\t    deb-line) APP_BASE=\"/var/lib/tomcat/webapps\" ;;\n141\t    *)        APP_BASE=\"/var/lib/tomcats/webapps\" ;;\n142\tesac\n143\trun mkdir -p \"${APP_BASE}\"\n144\t\n145\tinfo \"生成 ${SERVER_XML}\"\n146\tif is_dry_run; then\n147\t    echo \"[DRY-RUN] sed 替换并写入 ${SERVER_XML}\"\n148\telse\n149\t    [[ -f \"${SERVER_XML}\" ]] && cp -a \"${SERVER_XML}\" \"${SERVER_XML}.orig.$(date +%Y%m%d%H%M%S)\" || true\n150\t    sed -e \"s|__TOMCAT_PORT__|${TOMCAT_PORT}|g\" \\\n151\t        -e \"s|__TOMCAT_HOME__|${TARGET_TOMCAT_DIR}|g\" \\\n152\t        -e \"s|__TOMCAT_APP_HOME__|${APP_BASE}|g\" \\\n153\t        -e \"s|__MAX_THREADS__|${MAX_THREADS}|g\" \\\n154\t        \"${CFG_DIR}/server.xml.template\" > \"${SERVER_XML}\"\n155\tfi\n156\t\n157\tSETENV=\"${TARGET_TOMCAT_DIR}/bin/setenv.sh\"\n158\tinfo \"写入 JVM 选项：${SETENV}\"\n159\t\n160\t# 堆大小固定值（现场可通过修改 setenv.sh 调整）\n161\tXMS=\"1024M\"\n162\tXMX=\"4096M\"\n163\tinfo \"JVM heap: -Xms${XMS} -Xmx${XMX}\"\n164\t\n165\tif is_dry_run; then\n166\t    echo \"[DRY-RUN] write ${SETENV}\"\n167\telse\n168\t    cat > \"${SETENV}\" <<EOF\n169\t#!/usr/bin/env bash\n170\t# Generated by deploy-bundle installer\n171\t# systemd(Type=forking) 与手工 startup.sh 共用本文件：catalina.sh 启动时自动 source\n172\texport JAVA_HOME=\"${TARGET_JDK_DIR}\"\n173\texport CATALINA_HOME=\"${TARGET_TOMCAT_DIR}\"\n174\t# 与 tomcat.service 的 PIDFile 保持一致\n175\texport CATALINA_PID=\"${TARGET_TOMCAT_DIR}/temp/tomcat.pid\"\n176\t\n177\texport LANG=\"zh_CN.UTF-8\"\n178\texport LC_ALL=\"zh_CN.UTF-8\"\n179\t\n180\texport CATALINA_OPTS=\"\\${CATALINA_OPTS} -server\"\n181\texport CATALINA_OPTS=\"\\${CATALINA_OPTS} -Xms${XMS} -Xmx${XMX}\"\n182\texport CATALINA_OPTS=\"\\${CATALINA_OPTS} -XX:+UseG1GC -XX:MaxGCPauseMillis=200\"\n183\texport CATALINA_OPTS=\"\\${CATALINA_OPTS} -XX:MetaspaceSize=256m -XX:MaxMetaspaceSize=512m\"\n184\texport CATALINA_OPTS=\"\\${CATALINA_OPTS} -XX:+DisableExplicitGC\"\n185\texport CATALINA_OPTS=\"\\${CATALINA_OPTS} -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=${TARGET_TOMCAT_DIR}/logs/\"\n186\texport CATALINA_OPTS=\"\\${CATALINA_OPTS} -Djava.awt.headless=true\"\n187\texport CATALINA_OPTS=\"\\${CATALINA_OPTS} -Dfile.encoding=UTF-8\"\n188\texport CATALINA_OPTS=\"\\${CATALINA_OPTS} -Duser.timezone=Asia/Shanghai\"\n189\texport CATALINA_OPTS=\"\\${CATALINA_OPTS} -Djava.security.egd=file:/dev/./urandom\"\n190\t# GC 日志轮转（排查生产问题用）\n191\texport CATALINA_OPTS=\"\\${CATALINA_OPTS} -XX:+PrintGCDetails -XX:+PrintGCDateStamps\"\n192\texport CATALINA_OPTS=\"\\${CATALINA_OPTS} -Xloggc:${TARGET_TOMCAT_DIR}/logs/gc.log\"\n193\texport CATALINA_OPTS=\"\\${CATALINA_OPTS} -XX:+UseGCLogFileRotation -XX:NumberOfGCLogFiles=5 -XX:GCLogFileSize=20M\"\n194\tEOF\n195\t    chmod 755 \"${SETENV}\"\n196\tfi\n197\t\n198\tinfo \"安装优雅停机脚本：${TARGET_TOMCAT_DIR}/bin/tomcat-stop.sh\"\n199\tif is_dry_run; then\n200\t    echo \"[DRY-RUN] cp ${CFG_DIR}/tomcat-stop.sh ${TARGET_TOMCAT_DIR}/bin/tomcat-stop.sh\"\n201\telse\n202\t    cp -f \"${CFG_DIR}/tomcat-stop.sh\" \"${TARGET_TOMCAT_DIR}/bin/tomcat-stop.sh\" \\\n203\t        || die \"${EX_SYS}\" \"安装 tomcat-stop.sh 失败\"\n204\t    chmod 755 \"${TARGET_TOMCAT_DIR}/bin/tomcat-stop.sh\"\n205\tfi\n206\t\n207\t# context.xml 注入 clearReferencesStopThreads：应用停止时由 Tomcat 回收泄漏的非守护线程\n208\t# （mysql-cj abandoned-connection-cleanup、应用自建线程等），否则 JVM 停机永远退不干净，\n209\t# 只能被 kill -9。这是 Tomcat 官方属性，专治老应用线程泄漏。\n210\tCTX_XML=\"${TARGET_TOMCAT_DIR}/conf/context.xml\"\n211\tif [[ -f \"${CTX_XML}\" ]] && ! grep -q clearReferencesStopThreads \"${CTX_XML}\" 2>/dev/null; then\n212\t    if is_dry_run; then\n213\t        echo \"[DRY-RUN] sed ${CTX_XML} 注入 clearReferencesStopThreads\"\n214\t    else\n215\t        # 单条规则同时处理 \"<Context>\" 与 \"<Context foo=...>\" 两种形态：\n216\t        # 不能拆成两条 -e 规则叠加执行，否则第二条会把第一条注入的属性再注入一次，\n217\t        # 导致 XML 属性重复 fatal，整个 Host 部署失败（表现为所有应用 404）。\n218\t        sed -i -e 's|<Context\\([ >]\\)|<Context clearReferencesStopThreads=\"true\" clearReferencesStopTimerThreads=\"true\"\\1|' \"${CTX_XML}\" \\\n219\t            && info \"context.xml 已注入 clearReferencesStopThreads（停止时回收泄漏线程）\" \\\n220\t            || warn \"context.xml 注入失败（JVM 停机可能需要 kill 兜底）\"\n221\t    fi\n222\tfi\n223\t\n224\tinfo \"清理 Tomcat 默认应用（webapps）\"\n225\tif ! is_dry_run; then\n226\t    for app in examples docs host-manager manager; do\n227\t        local_app=\"${TARGET_TOMCAT_DIR}/webapps/${app}\"\n228\t        [[ -e \"${local_app}\" ]] && rm -rf \"${local_app}\"\n229\t        local_war=\"${TARGET_TOMCAT_DIR}/webapps/${app}.war\"\n230\t        [[ -e \"${local_war}\" ]] && rm -f \"${local_war}\"\n231\t    done\n232\tfi\n233\t\n234\tif [[ -f \"${TARGET_TOMCAT_DIR}/webapps/ROOT.war\" ]]; then\n235\t    warn \"默认 ROOT.war 已移除\"\n236\t    if ! is_dry_run; then rm -f \"${TARGET_TOMCAT_DIR}/webapps/ROOT.war\"; fi\n237\tfi\n238\t\n239\tif ! is_dry_run; then\n240\t    if [[ ! -L \"${TARGET_TOMCAT_DIR}/webapps\" ]]; then\n241\t        [[ -d \"${TARGET_TOMCAT_DIR}/webapps\" ]] && \\\n242\t            mv \"${TARGET_TOMCAT_DIR}/webapps\" \"${BACKUP_DIR:-/tmp}/webapps.orig.$(date +%Y%m%d%H%M%S)\" || true\n243\t        ln -sfn \"${APP_BASE}\" \"${TARGET_TOMCAT_DIR}/webapps\"\n244\t        info \"已软链 webapps -> ${APP_BASE}\"\n245\t    fi\n246\tfi\n247\t\n248\tif ! is_dry_run; then\n249\t    chown -R tomcat:tomcat \"${TARGET_TOMCAT_DIR}\" || warn \"chown 部分失败\"\n250\t    chmod -R u+rwX \"${TARGET_TOMCAT_DIR}\"\n251\t    chmod 750 \"${TARGET_TOMCAT_DIR}/conf\" || true\n252\t\n253\t    for sub in logs temp work; do\n254\t        [[ -d \"${TARGET_TOMCAT_DIR}/${sub}\" ]] && chmod 750 \"${TARGET_TOMCAT_DIR}/${sub}\"\n255\t    done\n256\t\n257\t    mkdir -p \"${APP_BASE}\"\n258\t    chown -R tomcat:tomcat \"${APP_BASE}\" || warn \"chown ${APP_BASE} 部分失败\"\n259\t    APP_PARENT=\"${APP_BASE%/*}\"\n260\t    if [[ -d \"${APP_PARENT}\" ]]; then\n261\t        chown tomcat:tomcat \"${APP_PARENT}\" || true\n262\t        chmod 755 \"${APP_PARENT}\"\n263\t    fi\n264\t    chmod 755 \"${APP_BASE}\"\n265\t\n266\t    ln -sf \"${TARGET_TOMCAT_DIR}/bin/catalina.sh\" /usr/local/bin/catalina.sh 2>/dev/null || true\n267\t    ln -sf \"${TARGET_TOMCAT_DIR}/bin/startup.sh\" /usr/local/bin/tomcat-startup 2>/dev/null || true\n268\t    ln -sf \"${TARGET_TOMCAT_DIR}/bin/shutdown.sh\" /usr/local/bin/tomcat-shutdown 2>/dev/null || true\n269\tfi\n270\t\n271\tif ! is_dry_run; then\n272\t    grep -v -E '^(CATALINA_HOME|TOMCAT_MAX_THREADS|TOMCAT_APP_BASE|TOMCAT_XMS|TOMCAT_XMX|TOMCAT_VERSION)=' /opt/deploy-bundle.env > /tmp/deploy-bundle.env.tmp || true\n273\t    cat >> /tmp/deploy-bundle.env.tmp <<EOF\n274\tCATALINA_HOME=${TARGET_TOMCAT_DIR}\n275\tTOMCAT_VERSION=${TOMCAT_VER}\n276\tTOMCAT_MAX_THREADS=${MAX_THREADS}\n277\tTOMCAT_APP_BASE=${APP_BASE}\n278\tTOMCAT_XMS=${XMS}\n279\tTOMCAT_XMX=${XMX}\n280\tEOF\n281\t    mv /tmp/deploy-bundle.env.tmp /opt/deploy-bundle.env\n282\tfi\n283\t\n284\tok \"Tomcat 安装完成：${TARGET_TOMCAT_DIR}（版本 ${TOMCAT_VER:-未知}）\"\n285\tok \"应用部署目录：${APP_BASE}\"\n286\tok \"部署应用：将 ROOT.war 拷到 ${APP_BASE}/ 后自动解压\"\n287\t\n288\tstage_end \"install_tomcat\"\n289\texit \"${EX_OK}\""}
+#!/usr/bin/env bash
+# install_tomcat.sh - Tomcat 9 离线部署
+
+set -Eeuo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib.sh"
+# 读取 installer.sh 写入的参数（TOMCAT_PORT / TOMCAT_APP_BASE 等）
+[[ -f /opt/deploy-bundle.env ]] && source /opt/deploy-bundle.env || true
+
+stage_begin "install_tomcat"
+require_detect
+require_root
+
+FAMILY="$(os_family)"
+ARCH_VAL="$(arch)"
+
+[[ -x "${TARGET_JDK_DIR}/bin/java" ]] || die "${EX_DEPS}" "JDK 未安装，请先运行 install_jdk.sh"
+
+select_tomcat_tar() {
+    local pkgs_dir="${PKG_DIR}/${FAMILY}/${ARCH_VAL}"
+    [[ -d "${pkgs_dir}" ]] || die "${EX_DEPS}" "包目录不存在：${pkgs_dir}"
+
+    # 首选 tomcat 子目录内的任意 tar.gz/zip——不要求文件名带版本号，
+    # 现场可能投喂 tomcat.zip、tomcat-test.tar.gz 等任意名字，版本以包内容为准
+    local found
+    if [[ -d "${pkgs_dir}/tomcat" ]]; then
+        found="$(find "${pkgs_dir}/tomcat" -maxdepth 1 -type f \
+            \( -name '*.tar.gz' -o -name '*.tgz' -o -name '*.zip' \) -size +5M 2>/dev/null | head -n1 || true)"
+        [[ -n "${found}" && -f "${found}" ]] && { echo "${found}"; return 0; }
+    fi
+    # 兼容：直接放在 packages/<family>/<arch>/ 下的规范命名包
+    local patterns=(
+        "apache-tomcat-9.0.*"
+        "apache-tomcat-9."
+        "tomcat-9."
+    )
+    for pat in "${patterns[@]}"; do
+        found="$(find "${pkgs_dir}" -maxdepth 2 -type f \
+            \( -name "${pat}*.tar.gz" -o -name "${pat}*.zip" \) 2>/dev/null | head -n1 || true)"
+        [[ -n "${found}" && -f "${found}" ]] && { echo "${found}"; return 0; }
+    done
+    return 1
+}
+
+TOMCAT_TAR="$(select_tomcat_tar || true)"
+if [[ -z "${TOMCAT_TAR}" || ! -f "${TOMCAT_TAR}" ]]; then
+    die "${EX_DEPS}" "未在 packages/${FAMILY}/${ARCH_VAL}/ 找到 Tomcat 9 归档包（tar.gz/zip）"
+fi
+info "选中 Tomcat 包：${TOMCAT_TAR}"
+
+# 硬性版本守卫：Tomcat 必须 9 系列——以包内容（顶层目录）为准，文件名任意。
+# 同一台机器投喂不同小版本（如 9.0.91 -> 9.0.132）无需改任何配置。
+TOMCAT_TOP="$(archive_top_entry "${TOMCAT_TAR}")"
+TOMCAT_TOP="${TOMCAT_TOP#./}"
+case "${TOMCAT_TOP}" in
+    apache-tomcat-9.*|tomcat-9.*) : ;;
+    *) die "${EX_DEPS}" "Tomcat 硬性要求 9 系列（包内容顶层目录：${TOMCAT_TOP:-无法识别}），实际文件：$(basename "${TOMCAT_TAR}")，拒绝安装" ;;
+esac
+TOMCAT_VER="$(printf '%s' "${TOMCAT_TOP}" | grep -oE '9\.[0-9]+(\.[0-9]+)?' | head -n1 || true)"
+info "Tomcat 包内实际版本：${TOMCAT_VER:-未知}"
+
+if [[ -e "${TARGET_TOMCAT_DIR}" && ! -L "${TARGET_TOMCAT_DIR}" ]]; then
+    BACKUP_DIR="$(ensure_backup_dir tomcat_existing)"
+    warn "备份 ${TARGET_TOMCAT_DIR} -> ${BACKUP_DIR}/tomcat"
+    if ! is_dry_run; then
+        cp -a "${TARGET_TOMCAT_DIR}" "${BACKUP_DIR}/tomcat" || die "${EX_SYS}" "备份失败"
+    fi
+fi
+
+if [[ -L "${TARGET_TOMCAT_DIR}" ]]; then run rm -f "${TARGET_TOMCAT_DIR}"; fi
+mkdir -p "${TARGET_TOMCAT_DIR}"
+info "解压 ${TOMCAT_TAR} -> ${TARGET_TOMCAT_DIR}"
+case "${TOMCAT_TAR}" in
+    *.zip)
+        # tar 解不了 zip；unzip 未安装时用 python3 兜底（RPM 系 dnf 依赖 python3，几乎必装）。
+        # unzip 无 --strip-components，先解到临时目录再按顶层目录平移。
+        if is_dry_run; then
+            echo "[DRY-RUN] 解压 ${TOMCAT_TAR} -> 临时目录并平移至 ${TARGET_TOMCAT_DIR}"
+        else
+            _tmpd="$(mktemp -d "${TARGET_TOMCAT_DIR}/.unzip.XXXXXX")"
+            if have_cmd unzip; then
+                unzip -q "${TOMCAT_TAR}" -d "${_tmpd}" || { rm -rf "${_tmpd}"; die "${EX_SYS}" "zip 解压失败"; }
+            elif have_cmd python3; then
+                # python3 zipfile.extractall 会按 zip 内记录的 unix 权限恢复（Apache 官方 zip 均保留），
+                # 保险起见解压后对 bin/*.sh 显式恢复执行位，防止权限丢失导致 catalina.sh 无法执行
+                python3 -c 'import sys, zipfile
+zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "${TOMCAT_TAR}" "${_tmpd}" \
+                    || { rm -rf "${_tmpd}"; die "${EX_SYS}" "zip 解压失败（python3）"; }
+            else
+                rm -rf "${_tmpd}"
+                die "${EX_DEPS}" "目标机缺少 unzip/python3，无法解压 .zip 包；离线环境请优先投喂 tar.gz（采集机可用 tar -czf 重制）"
+            fi
+            _top="${TOMCAT_TOP}"
+            if [[ ! -d "${_tmpd}/${_top}" ]]; then
+                _top="$(find "${_tmpd}" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+            fi
+            if [[ -n "${_top}" && -d "${_tmpd}/${_top}" ]]; then
+                cp -a "${_tmpd}/${_top}/." "${TARGET_TOMCAT_DIR}/"
+            else
+                # zip 内无顶层目录（文件直接在根），整体平移
+                cp -a "${_tmpd}/." "${TARGET_TOMCAT_DIR}/"
+            fi
+            find "${TARGET_TOMCAT_DIR}/bin" -name '*.sh' -exec chmod 755 {} + 2>/dev/null || true
+            rm -rf "${_tmpd}"
+        fi
+        ;;
+    *)
+        run tar -xf "${TOMCAT_TAR}" -C "${TARGET_TOMCAT_DIR}" --strip-components=1
+        ;;
+esac
+
+[[ -x "${TARGET_TOMCAT_DIR}/bin/catalina.sh" ]] || die "${EX_SYS}" "Tomcat 解压后未找到 catalina.sh"
+
+if ! getent group tomcat >/dev/null 2>&1; then
+    if is_dry_run; then echo "[DRY-RUN] groupadd -r tomcat"
+    else groupadd -r tomcat || die "${EX_SYS}" "groupadd tomcat 失败"; fi
+fi
+if ! getent passwd tomcat >/dev/null 2>&1; then
+    if is_dry_run; then echo "[DRY-RUN] useradd -r -g tomcat -d ${TARGET_TOMCAT_DIR} -s /sbin/nologin tomcat"
+    else useradd -r -g tomcat -d "${TARGET_TOMCAT_DIR}" -s /sbin/nologin tomcat \
+        || die "${EX_SYS}" "useradd tomcat 失败"; fi
+fi
+
+SERVER_XML="${TARGET_TOMCAT_DIR}/conf/server.xml"
+if [[ ! -f "${CFG_DIR}/server.xml.template" ]]; then
+    die "${EX_DEPS}" "缺少 server.xml.template"
+fi
+
+TOTAL_MEM_MB="$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 2048)"
+if [[ "${TOTAL_MEM_MB}" -lt 2048 ]]; then
+    MAX_THREADS=200
+elif [[ "${TOTAL_MEM_MB}" -lt 8192 ]]; then
+    MAX_THREADS=400
+else
+    MAX_THREADS=800
+fi
+info "Tomcat maxThreads=${MAX_THREADS}（系统内存 ${TOTAL_MEM_MB}M）"
+
+case "${FAMILY}" in
+    deb-line) APP_BASE="/var/lib/tomcat/webapps" ;;
+    *)        APP_BASE="/var/lib/tomcats/webapps" ;;
+esac
+run mkdir -p "${APP_BASE}"
+
+info "生成 ${SERVER_XML}"
+if is_dry_run; then
+    echo "[DRY-RUN] sed 替换并写入 ${SERVER_XML}"
+else
+    [[ -f "${SERVER_XML}" ]] && cp -a "${SERVER_XML}" "${SERVER_XML}.orig.$(date +%Y%m%d%H%M%S)" || true
+    sed -e "s|__TOMCAT_PORT__|${TOMCAT_PORT}|g" \
+        -e "s|__TOMCAT_HOME__|${TARGET_TOMCAT_DIR}|g" \
+        -e "s|__TOMCAT_APP_HOME__|${APP_BASE}|g" \
+        -e "s|__MAX_THREADS__|${MAX_THREADS}|g" \
+        "${CFG_DIR}/server.xml.template" > "${SERVER_XML}"
+fi
+
+SETENV="${TARGET_TOMCAT_DIR}/bin/setenv.sh"
+info "写入 JVM 选项：${SETENV}"
+
+# 堆大小固定值（现场可通过修改 setenv.sh 调整）
+XMS="1024M"
+XMX="4096M"
+info "JVM heap: -Xms${XMS} -Xmx${XMX}"
+
+if is_dry_run; then
+    echo "[DRY-RUN] write ${SETENV}"
+else
+    cat > "${SETENV}" <<EOF
+#!/usr/bin/env bash
+# Generated by deploy-bundle installer
+# systemd(Type=forking) 与手工 startup.sh 共用本文件：catalina.sh 启动时自动 source
+export JAVA_HOME="${TARGET_JDK_DIR}"
+export CATALINA_HOME="${TARGET_TOMCAT_DIR}"
+# 与 tomcat.service 的 PIDFile 保持一致
+export CATALINA_PID="${TARGET_TOMCAT_DIR}/temp/tomcat.pid"
+
+export LANG="zh_CN.UTF-8"
+export LC_ALL="zh_CN.UTF-8"
+
+export CATALINA_OPTS="\${CATALINA_OPTS} -server"
+export CATALINA_OPTS="\${CATALINA_OPTS} -Xms${XMS} -Xmx${XMX}"
+export CATALINA_OPTS="\${CATALINA_OPTS} -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+export CATALINA_OPTS="\${CATALINA_OPTS} -XX:MetaspaceSize=256m -XX:MaxMetaspaceSize=512m"
+export CATALINA_OPTS="\${CATALINA_OPTS} -XX:+DisableExplicitGC"
+export CATALINA_OPTS="\${CATALINA_OPTS} -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=${TARGET_TOMCAT_DIR}/logs/"
+export CATALINA_OPTS="\${CATALINA_OPTS} -Djava.awt.headless=true"
+export CATALINA_OPTS="\${CATALINA_OPTS} -Dfile.encoding=UTF-8"
+export CATALINA_OPTS="\${CATALINA_OPTS} -Duser.timezone=Asia/Shanghai"
+export CATALINA_OPTS="\${CATALINA_OPTS} -Djava.security.egd=file:/dev/./urandom"
+# GC 日志轮转（排查生产问题用）
+export CATALINA_OPTS="\${CATALINA_OPTS} -XX:+PrintGCDetails -XX:+PrintGCDateStamps"
+export CATALINA_OPTS="\${CATALINA_OPTS} -Xloggc:${TARGET_TOMCAT_DIR}/logs/gc.log"
+export CATALINA_OPTS="\${CATALINA_OPTS} -XX:+UseGCLogFileRotation -XX:NumberOfGCLogFiles=5 -XX:GCLogFileSize=20M"
+EOF
+    chmod 755 "${SETENV}"
+fi
+
+info "安装优雅停机脚本：${TARGET_TOMCAT_DIR}/bin/tomcat-stop.sh"
+if is_dry_run; then
+    echo "[DRY-RUN] cp ${CFG_DIR}/tomcat-stop.sh ${TARGET_TOMCAT_DIR}/bin/tomcat-stop.sh"
+else
+    cp -f "${CFG_DIR}/tomcat-stop.sh" "${TARGET_TOMCAT_DIR}/bin/tomcat-stop.sh" \
+        || die "${EX_SYS}" "安装 tomcat-stop.sh 失败"
+    chmod 755 "${TARGET_TOMCAT_DIR}/bin/tomcat-stop.sh"
+fi
+
+# context.xml 注入 clearReferencesStopThreads：应用停止时由 Tomcat 回收泄漏的非守护线程
+# （mysql-cj abandoned-connection-cleanup、应用自建线程等），否则 JVM 停机永远退不干净，
+# 只能被 kill -9。这是 Tomcat 官方属性，专治老应用线程泄漏。
+CTX_XML="${TARGET_TOMCAT_DIR}/conf/context.xml"
+if [[ -f "${CTX_XML}" ]] && ! grep -q clearReferencesStopThreads "${CTX_XML}" 2>/dev/null; then
+    if is_dry_run; then
+        echo "[DRY-RUN] sed ${CTX_XML} 注入 clearReferencesStopThreads"
+    else
+        # 单条规则同时处理 "<Context>" 与 "<Context foo=...>" 两种形态：
+        # 不能拆成两条 -e 规则叠加执行，否则第二条会把第一条注入的属性再注入一次，
+        # 导致 XML 属性重复 fatal，整个 Host 部署失败（表现为所有应用 404）。
+        sed -i -e 's|<Context\([ >]\)|<Context clearReferencesStopThreads="true" clearReferencesStopTimerThreads="true"\1|' "${CTX_XML}" \
+            && info "context.xml 已注入 clearReferencesStopThreads（停止时回收泄漏线程）" \
+            || warn "context.xml 注入失败（JVM 停机可能需要 kill 兜底）"
+    fi
+fi
+
+info "清理 Tomcat 默认应用（webapps）"
+if ! is_dry_run; then
+    for app in examples docs host-manager manager; do
+        local_app="${TARGET_TOMCAT_DIR}/webapps/${app}"
+        [[ -e "${local_app}" ]] && rm -rf "${local_app}"
+        local_war="${TARGET_TOMCAT_DIR}/webapps/${app}.war"
+        [[ -e "${local_war}" ]] && rm -f "${local_war}"
+    done
+fi
+
+if [[ -f "${TARGET_TOMCAT_DIR}/webapps/ROOT.war" ]]; then
+    warn "默认 ROOT.war 已移除"
+    if ! is_dry_run; then rm -f "${TARGET_TOMCAT_DIR}/webapps/ROOT.war"; fi
+fi
+
+if ! is_dry_run; then
+    if [[ ! -L "${TARGET_TOMCAT_DIR}/webapps" ]]; then
+        [[ -d "${TARGET_TOMCAT_DIR}/webapps" ]] && \
+            mv "${TARGET_TOMCAT_DIR}/webapps" "${BACKUP_DIR:-/tmp}/webapps.orig.$(date +%Y%m%d%H%M%S)" || true
+        ln -sfn "${APP_BASE}" "${TARGET_TOMCAT_DIR}/webapps"
+        info "已软链 webapps -> ${APP_BASE}"
+    fi
+fi
+
+if ! is_dry_run; then
+    chown -R tomcat:tomcat "${TARGET_TOMCAT_DIR}" || warn "chown 部分失败"
+    chmod -R u+rwX "${TARGET_TOMCAT_DIR}"
+    chmod 750 "${TARGET_TOMCAT_DIR}/conf" || true
+
+    for sub in logs temp work; do
+        [[ -d "${TARGET_TOMCAT_DIR}/${sub}" ]] && chmod 750 "${TARGET_TOMCAT_DIR}/${sub}"
+    done
+
+    mkdir -p "${APP_BASE}"
+    chown -R tomcat:tomcat "${APP_BASE}" || warn "chown ${APP_BASE} 部分失败"
+    APP_PARENT="${APP_BASE%/*}"
+    if [[ -d "${APP_PARENT}" ]]; then
+        chown tomcat:tomcat "${APP_PARENT}" || true
+        chmod 755 "${APP_PARENT}"
+    fi
+    chmod 755 "${APP_BASE}"
+
+    ln -sf "${TARGET_TOMCAT_DIR}/bin/catalina.sh" /usr/local/bin/catalina.sh 2>/dev/null || true
+    ln -sf "${TARGET_TOMCAT_DIR}/bin/startup.sh" /usr/local/bin/tomcat-startup 2>/dev/null || true
+    ln -sf "${TARGET_TOMCAT_DIR}/bin/shutdown.sh" /usr/local/bin/tomcat-shutdown 2>/dev/null || true
+fi
+
+if ! is_dry_run; then
+    grep -v -E '^(CATALINA_HOME|TOMCAT_MAX_THREADS|TOMCAT_APP_BASE|TOMCAT_XMS|TOMCAT_XMX|TOMCAT_VERSION)=' /opt/deploy-bundle.env > /tmp/deploy-bundle.env.tmp || true
+    cat >> /tmp/deploy-bundle.env.tmp <<EOF
+CATALINA_HOME=${TARGET_TOMCAT_DIR}
+TOMCAT_VERSION=${TOMCAT_VER}
+TOMCAT_MAX_THREADS=${MAX_THREADS}
+TOMCAT_APP_BASE=${APP_BASE}
+TOMCAT_XMS=${XMS}
+TOMCAT_XMX=${XMX}
+EOF
+    mv /tmp/deploy-bundle.env.tmp /opt/deploy-bundle.env
+fi
+
+ok "Tomcat 安装完成：${TARGET_TOMCAT_DIR}（版本 ${TOMCAT_VER:-未知}）"
+ok "应用部署目录：${APP_BASE}"
+ok "部署应用：将 ROOT.war 拷到 ${APP_BASE}/ 后自动解压"
+
+stage_end "install_tomcat"
+exit "${EX_OK}"
