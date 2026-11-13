@@ -66,6 +66,14 @@ if [[ "${SKIP_TOMCAT}" -eq 0 ]]; then
             *)        APP_BASE="/var/lib/tomcats/webapps" ;;
         esac
     fi
+    # MySQL 就绪门脚本：占位符 __MYSQL_PORT__ 替换为实际端口（env 文件或默认 3306）
+    if ! is_dry_run; then
+        run install -d -m 0755 "${TARGET_TOMCAT_DIR}/bin"
+        sed -e "s|__MYSQL_PORT__|${MYSQL_PORT:-3306}|g" \
+            "${CFG_DIR}/wait-for-mysql.sh" > "${TARGET_TOMCAT_DIR}/bin/wait-for-mysql.sh"
+        chmod 755 "${TARGET_TOMCAT_DIR}/bin/wait-for-mysql.sh"
+        info "安装 MySQL 就绪门：${TARGET_TOMCAT_DIR}/bin/wait-for-mysql.sh（端口 ${MYSQL_PORT:-3306}）"
+    fi
     info "注册 ${SVC}（应用目录：${APP_BASE}）"
     if is_dry_run; then
         echo "[DRY-RUN] write ${SVC}"
