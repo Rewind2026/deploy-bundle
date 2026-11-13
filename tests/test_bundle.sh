@@ -144,6 +144,10 @@ assert "my.cnf 含 __MYSQL_DATA_DIR__" "grep -q '__MYSQL_DATA_DIR__' configs/my.
 assert "server.xml 含 __TOMCAT_PORT__" "grep -q '__TOMCAT_PORT__' configs/server.xml.template"
 assert "mysqld.service 含 __MYSQL_DATA_DIR__" "grep -q '__MYSQL_DATA_DIR__' configs/mysqld.service"
 assert "tomcat.service 含 __JAVA_HOME__" "grep -q '__JAVA_HOME__' configs/tomcat.service"
+assert "configs/wait-for-mysql.sh 存在" "[[ -f configs/wait-for-mysql.sh ]]"
+assert "wait-for-mysql.sh 语法通过" "bash -n configs/wait-for-mysql.sh"
+assert "tomcat.service 引用 wait-for-mysql" "grep -q 'wait-for-mysql' configs/tomcat.service"
+assert "tomcat.service 在 mysqld 之后启动" "grep -q 'After=network.target mysqld.service' configs/tomcat.service"
 assert "java.security 含 3DES" "grep -q '3DES_EDE_CBC' configs/java.security"
 
 section "8. Ansible 配置文件"
