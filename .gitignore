@@ -12,6 +12,11 @@
 packages/
 **/packages/
 
+# 应用放置目录（用户现场的真实 SQL / WAR，含业务数据，绝不入库）
+/app/
+app/sql/
+app/war/
+
 # 沙箱 / 现场运行时产物
 collect.env
 *.env.local
