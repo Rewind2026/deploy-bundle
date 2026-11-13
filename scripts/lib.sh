@@ -260,8 +260,17 @@ auto_detect_family() {
             openEuler:20.03*)                         echo "rhel7-line" ;;  # glibc 2.28 但 rpmlib 类似 rhel7
             openEuler:22.03*|openEuler:24.03*)        echo "openeuler-line" ;;
             anolis:*|TencentOS:*|openCloudOS:*)        echo "rhel8-line" ;;
-            kylin:*V10*|kylin:*v10*)                   echo "rhel7-line" ;;  # V10 SP1/SP2 glibc 2.17
-            kylin:*V11*|kylin:*v11*)                   echo "openeuler-line" ;;
+            kylin:*)
+                # 麒麟桌面版是 deb 系（apt/dpkg，无 yum/dnf），服务器版是 rpm 系
+                if command -v dpkg >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1 \
+                   && ! command -v dnf >/dev/null 2>&1 && ! command -v yum >/dev/null 2>&1; then
+                    echo "deb-line"
+                else
+                    case "${ver}" in
+                        V10*|v10*) echo "rhel7-line" ;;  # V10 SP1/SP2 glibc 2.17
+                        *)         echo "openeuler-line" ;;  # V11 及以上
+                    esac
+                fi ;;
             ubuntu:*|debian:*|deepin:*|Kylin:*Desktop*) echo "deb-line" ;;
             # UOS 需要进一步探测
             UOS:*|uos:*)
