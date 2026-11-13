@@ -50,7 +50,9 @@ info "从 Adoptium 下载 JDK 8（仅镜像机）"
 # 故先解析 307 重定向后的最终 URL 取文件名。GitHub 最终跳到 release-assets CDN，
 # 真实文件名在 query 参数 filename%3Dxxx.tar.gz 中
 FINAL_URL="$(curl -fsSL -o /dev/null --max-time 60 -w '%{url_effective}' "${URL_BASE}" || true)"
-FNAME="$(printf '%s' "${FINAL_URL:-}" | grep -oE 'filename%3D[A-Za-z0-9._-]+\.tar\.gz' | head -n1 | sed 's/^filename%3D//')"
+# 注意：Adoptium 不可达时 FINAL_URL 为空，grep 无匹配返回非 0，
+# 在 set -o pipefail 下会直接杀死脚本（2026-11-13 实测 Kylin V11 上复现），故追加 || true
+FNAME="$(printf '%s' "${FINAL_URL:-}" | grep -oE 'filename%3D[A-Za-z0-9._-]+\.tar\.gz' | head -n1 | sed 's/^filename%3D//' || true)"
 [[ -n "${FNAME}" ]] || FNAME="$(basename "${FINAL_URL:-}")"
 [[ "${FNAME}" =~ \.tar\.gz$ ]] || FNAME="jdk${JDK_VERSION}-linux-${API_ARCH}.tar.gz"
 info "目标文件名：${FNAME}"
