@@ -22,6 +22,13 @@ fi
 
 if [[ -n "${KYLIN_UOS_MILESTONE}" ]]; then
     _KYLIN_MS="${KYLIN_UOS_MILESTONE}"
+    # 麒麟桌面版（V10/V11）与服务器版共用 /etc/.kyinfo，但桌面版是 deb 系（apt/dpkg），
+    # 服务器版是 rpm 系（yum/dnf）。必须先按包管理器分家，再走版本→family 映射。
+    _KYLIN_IS_DEB=0
+    if command -v dpkg >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1 \
+       && ! command -v dnf >/dev/null 2>&1 && ! command -v yum >/dev/null 2>&1; then
+        _KYLIN_IS_DEB=1
+    fi
     _KYLIN_SP=""
     _KYLIN_MS_TAIL=""
     _KYLIN_V11_MINOR=""
@@ -39,7 +46,15 @@ if [[ -n "${KYLIN_UOS_MILESTONE}" ]]; then
         _KYLIN_MS_TAIL="${BASH_REMATCH[1]}"
     fi
 
-    if [[ "${_KYLIN_MS}" == *"V11"* || "${KYLIN_UOS_DIST_NAME:-}" == *"V11"* ]]; then
+    if [[ "${_KYLIN_IS_DEB}" == "1" ]]; then
+        # 桌面版（deb 系）：V11 用 kylin-desktop-v11，其余归入 v10
+        _KYLIN_DV="v10"
+        [[ "${_KYLIN_MS}" == *"V11"* ]] && _KYLIN_DV="v11"
+        KYLIN_UOS_OS="kylin-desktop-${_KYLIN_DV}"
+        KYLIN_UOS_VARIANT="desktop"
+        KYLIN_UOS_FAMILY="deb-line"
+        KYLIN_UOS_GLIBC="28"
+    elif [[ "${_KYLIN_MS}" == *"V11"* || "${KYLIN_UOS_DIST_NAME:-}" == *"V11"* ]]; then
         case "${_KYLIN_V11_MINOR}" in
             ""|unknown)
                 KYLIN_UOS_OS="kylin-v11"
@@ -110,7 +125,7 @@ if [[ -f /etc/os-release ]]; then
             esac
         else
             KYLIN_UOS_FAMILY="deb-line"
-            KYLIN_UOS_GLIBC="14"
+            KYLIN_UOS_GLIBC="28"
         fi
     fi
 fi
