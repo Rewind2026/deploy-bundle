@@ -144,6 +144,8 @@ assert "my.cnf 含 __MYSQL_DATA_DIR__" "grep -q '__MYSQL_DATA_DIR__' configs/my.
 assert "server.xml 含 __TOMCAT_PORT__" "grep -q '__TOMCAT_PORT__' configs/server.xml.template"
 assert "mysqld.service 含 __MYSQL_DATA_DIR__" "grep -q '__MYSQL_DATA_DIR__' configs/mysqld.service"
 assert "tomcat.service 含 __JAVA_HOME__" "grep -q '__JAVA_HOME__' configs/tomcat.service"
+assert "tomcat.service TimeoutStartSec > 就绪门超时" "grep -q 'TimeoutStartSec=320' configs/tomcat.service"
+assert "systemd_register 替换 unit 中 __MYSQL_PORT__" "[[ \$(grep -c 's|__MYSQL_PORT__|' scripts/systemd_register.sh) -ge 2 ]]"
 assert "configs/wait-for-mysql.sh 存在" "[[ -f configs/wait-for-mysql.sh ]]"
 assert "wait-for-mysql.sh 语法通过" "bash -n configs/wait-for-mysql.sh"
 assert "tomcat.service 引用 wait-for-mysql" "grep -q 'wait-for-mysql' configs/tomcat.service"
