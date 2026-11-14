@@ -1,6 +1,6 @@
-deploy-bundle 1.1.4
-build: 2026-11-13
+deploy-bundle 1.1.5
+build: 2026-11-14
 target: MySQL 8.4.x + Tomcat 9.x + JDK 1.8.x
-note: 修复 systemd_register 遗漏 tomcat.service 中 __MYSQL_PORT__ 替换（实测 Kylin V11 就绪门因占位符未替换阻塞 90s 被 systemd 超时）；tomcat.service 增加 TimeoutStartSec=320 兜底低配机器首次 MySQL 初始化；collect_jdk/precheck 修复 pipefail 下 grep 无匹配中断脚本
-scope: Kylin V10/V11（服务器版+桌面版）, UOS 1050/1070, openEuler 20.03/22.03/24.03, Anolis OS 8/23
+note: 修复 UOS Server 25 被误判为 uos-desktop（deb-line）——探测只看 /usr/lib/os-version 且无包管理器兜底；现改查 UOS 惯例路径 /etc/os-version（/usr/lib 后备），并加 dnf/yum 兜底判 server；UOS Server 23/24/25（openEuler 基座）映射 openeuler-line
+scope: Kylin V10/V11（服务器版+桌面版）, UOS Server 20/1050/1060/1070/23/24/25, UOS 桌面版, openEuler 20.03/22.03/24.03, Anolis OS 8/23
 archs: x86_64, aarch64 (loongarch64 removed)
