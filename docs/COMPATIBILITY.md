@@ -9,8 +9,8 @@ deploy-bundle 把所有目标 Linux 归为 5 个家族:
 | family | 包含系统 | glibc | 包格式 |
 |--------|---------|-----------|--------|
 | `rhel7-line` | CentOS 7 / RHEL 7 / Rocky 7 / AlmaLinux 7 / Kylin V10 SP1-SP2 / openEuler 20.03 | 2.17 | RPM |
-| `rhel8-line` | CentOS 8 / RHEL 8 / Rocky 8 / AlmaLinux 8 / RHEL 9 / Rocky 9 / CentOS Stream 8-9 / openEuler 24.03 / Anolis OS 8 / TencentOS Server 3-4 / openCloudOS 8 | 2.28 | RPM |
-| `openeuler-line` | openEuler 22.03 / openEuler 20.03 LTS SP3+ / Kylin V11 | 2.34 | RPM |
+| `rhel8-line` | CentOS 8 / RHEL 8 / Rocky 8 / AlmaLinux 8 / RHEL 9 / Rocky 9 / CentOS Stream 8-9 / Anolis OS 8 / TencentOS Server 3-4 / openCloudOS 8 | 2.28 | RPM |
+| `openeuler-line` | openEuler 22.03 / 24.03 / 26.09（**大版本兜底，未来新版本自动归入**）/ openEuler 20.03 LTS SP3+ / Kylin V11 / UOS Server 23+ | 2.34+ | RPM |
 | `deb-line` | Ubuntu 18.04+ / Debian 10+ / UOS 桌面版 / Deepin 20+ / Kylin Desktop V10 SP3+ / **openKylin 2.x/3.x** | 2.27+ | DEB |
 | `loongarch` | （预留） | - | - |
 
@@ -91,6 +91,7 @@ Kylin/UOS 专项: `scripts/detect_kylin_uos.sh`。
 | 统信 UOS | Server 23/24/25 | openeuler-line | x86_64 | 已识别（2026-11-14 修复误判 desktop） |
 | openKylin | 3.0 (huanghe) | deb-line | x86_64 | 已识别（2026-11-14 修复误判 rhel8-line），待真机部署验证 |
 | openEuler | 22.03 | openeuler-line | x86_64 | OK |
+| openEuler | 26.09 | openeuler-line | x86_64 | 已识别（2026-11-14 修复 collect 误判 rhel8-line） |
 | openEuler | 20.03 | rhel7-line | x86_64 | OK |
 | 龙蜥 Anolis OS | 8 | rhel8-line | x86_64 | OK |
 | 阿里云 Anolis OS | 23 | rhel8-line | x86_64 | OK |
