@@ -46,10 +46,33 @@ local_deps_install() {
         return 0
     fi
 
-    info "安装本地依赖：$(basename "${found}" | head -n1)"
+    # find 的 ${depname}* 可能同时命中多个变体（如 libaio1 与 libaio1t64），
+    # 多行结果必须逐个安装，不能整体当单个参数传给 dpkg/rpm
+    #（此前 libaio 命中 libaio1 + libaio1t64 两个文件，dpkg 把两行路径当一个
+    #  参数处理直接报错，2026-11-14 openKylin 实测）
+    local f
     case "${PKG_MGR_VAL}" in
-        rpm) run rpm -Uvh --nodeps "${found}" 2>&1 | tee -a "${LOG_FILE}" || true ;;
-        dpkg) run dpkg -i "${found}" 2>&1 | tee -a "${LOG_FILE}" || run apt-get -y -f install ;;
+        rpm)
+            while IFS= read -r f; do
+                [[ -f "${f}" ]] || continue
+                info "安装本地依赖：$(basename "${f}")"
+                if run rpm -Uvh --nodeps "${f}" 2>&1 | tee -a "${LOG_FILE}"; then
+                    return 0
+                fi
+            done <<< "${found}"
+            warn "本地依赖 ${depname} 未能通过 rpm 安装（继续）"
+            ;;
+        dpkg)
+            while IFS= read -r f; do
+                [[ -f "${f}" ]] || continue
+                info "安装本地依赖：$(basename "${f}")"
+                if run dpkg -i "${f}" 2>&1 | tee -a "${LOG_FILE}"; then
+                    return 0
+                fi
+            done <<< "${found}"
+            warn "本地依赖 ${depname} 未能通过 dpkg 安装，尝试 apt-get -f 修复"
+            run apt-get -y -f install 2>&1 | tee -a "${LOG_FILE}" || true
+            ;;
     esac
 }
 
