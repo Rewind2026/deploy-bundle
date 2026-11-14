@@ -272,8 +272,11 @@ auto_detect_family() {
             rhel:7*|centos:7*|rocky:7*|almalinux:7*) echo "rhel7-line" ;;
             rhel:8*|centos:8*|rocky:8*|almalinux:8*) echo "rhel8-line" ;;
             rhel:9*|centos:9*|rocky:9*|almalinux:9*) echo "rhel8-line" ;;   # 9 系沿用 8-line 路径
-            openEuler:20.03*)                         echo "rhel7-line" ;;  # glibc 2.28 但 rpmlib 类似 rhel7
-            openEuler:22.03*|openEuler:24.03*)        echo "openeuler-line" ;;
+            # openEuler 按大版本判定，不写死小版本——否则新小版本（如 26.09）
+            # 会掉进 *) 兜底被误判 rhel8-line，而 installer 的 precheck 判
+            # openeuler-line，两套结果不一致导致包采错目录（2026-11-14 实测）
+            openEuler:20.*)                           echo "rhel7-line" ;;  # glibc 2.28 但 rpmlib 类似 rhel7
+            openEuler:*)                              echo "openeuler-line" ;;  # 22.03/24.03/26.09 及未来版本
             anolis:*|TencentOS:*|openCloudOS:*)        echo "rhel8-line" ;;
             kylin:*)
                 # 麒麟桌面版是 deb 系（apt/dpkg，无 yum/dnf），服务器版是 rpm 系
