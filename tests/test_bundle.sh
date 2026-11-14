@@ -163,6 +163,9 @@ assert "detect.sh 只读探测报告存在且语法通过" "[[ -f scripts/detect
 assert "COMPATIBILITY.md 收录 openKylin" "grep -q 'openKylin' docs/COMPATIBILITY.md"
 assert "detect.sh glibc 探测无 SIGPIPE 竞态（awk 读全量）" "grep -q 'NR==1' scripts/detect.sh"
 assert "install_mysql 依赖逐个安装（libaio1/libaio1t64 多变体修复）" "grep -q '逐个安装' scripts/install_mysql.sh"
+assert "lib.sh openEuler 按大版本判定（26.09 漏判 rhel8-line 修复）" "grep -q 'openEuler:\*)' scripts/lib.sh"
+assert "lib.sh openEuler 不再写死 22.03/24.03 小版本" "! grep -q 'openEuler:22.03' scripts/lib.sh"
+assert "precheck openEuler 同样按大版本判定（两套逻辑一致）" "grep -q 'openeuler-line' scripts/precheck.sh"
 
 section "8. Ansible 配置文件"
 assert "ansible/deploy.yml 存在" "[[ -f ansible/deploy.yml ]]"
