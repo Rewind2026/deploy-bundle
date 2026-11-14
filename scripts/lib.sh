@@ -287,6 +287,8 @@ auto_detect_family() {
                     esac
                 fi ;;
             ubuntu:*|debian:*|deepin:*|Kylin:*Desktop*) echo "deb-line" ;;
+            # openKylin（社区版，Debian/Ubuntu 系，apt/dpkg，无 .kyinfo）
+            openkylin:*) echo "deb-line" ;;
             # UOS 需要进一步探测
             UOS:*|uos:*)
                 if command -v dpkg >/dev/null 2>&1 && dpkg -l >/dev/null 2>&1; then
@@ -295,7 +297,16 @@ auto_detect_family() {
                     echo "rhel8-line"
                 fi
                 ;;
-            *) echo "rhel8-line" ;;  # 保守默认
+            # 未知系统：按包管理器兜底（apt 系绝不能走 rpm 采集路径），
+            # 而非一律 rhel8-line——此前 openKylin（ID=openkylin 无 ID_LIKE）
+            # 被这条默认分支误判成 rhel8-line，2026-11-14 实测
+            *)
+                if command -v dpkg >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1 \
+                   && ! command -v dnf >/dev/null 2>&1 && ! command -v yum >/dev/null 2>&1; then
+                    echo "deb-line"
+                else
+                    echo "rhel8-line"
+                fi ;;
         esac
     else
         echo "rhel8-line"
