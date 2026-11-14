@@ -18,7 +18,7 @@ ARCH_VAL="$(arch)"
 
 select_tomcat_tar() {
     local pkgs_dir="${PKG_DIR}/${FAMILY}/${ARCH_VAL}"
-    [[ -d "${pkgs_dir}" ]] || die "${EX_DEPS}" "包目录不存在：${pkgs_dir}"
+    [[ -d "${pkgs_dir}" ]] || { diag_pkgs_dir "${FAMILY}" "${ARCH_VAL}" "${PKG_DIR}"; die "${EX_DEPS}" "包目录不存在：${pkgs_dir}"; }
 
     # 首选 tomcat 子目录内的任意 tar.gz/zip——不要求文件名带版本号，
     # 现场可能投喂 tomcat.zip、tomcat-test.tar.gz 等任意名字，版本以包内容为准
