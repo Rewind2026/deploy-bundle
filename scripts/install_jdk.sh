@@ -29,7 +29,7 @@ select_jdk_tar() {
     )
 
     local pkgs_dir="${PKG_DIR}/${FAMILY}/${ARCH_VAL}"
-    [[ -d "${pkgs_dir}" ]] || die "${EX_DEPS}" "包目录不存在：${pkgs_dir}"
+    [[ -d "${pkgs_dir}" ]] || { diag_pkgs_dir "${FAMILY}" "${ARCH_VAL}" "${PKG_DIR}"; die "${EX_DEPS}" "包目录不存在：${pkgs_dir}"; }
 
     for pat in "${patterns[@]}"; do
         local found
