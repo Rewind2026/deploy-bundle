@@ -248,6 +248,21 @@ have_iptables() { [[ "$(det_get HAVE_IPTABLES)" == "1" ]]; }
 # 自动检测（供 collect.sh / collect_*.sh 共用）
 # -----------------------------------------------------------------------------
 auto_detect_family() {
+    # Kylin/UOS 专项探测优先（复用 detect_kylin_uos.sh，单一事实来源：
+    # /etc/os-version + dnf/yum 兜底。此前这里另写了一套 UOS 判定，导致
+    # UOS Server 25 在有 dpkg 的机器上被误判 deb-line，2026-11-14 实测）
+    local dku="${SCRIPT_DIR:-}/detect_kylin_uos.sh"
+    if [[ ! -f "${dku}" ]]; then
+        dku="/opt/deploy-bundle/scripts/detect_kylin_uos.sh"
+    fi
+    if [[ -f "${dku}" ]]; then
+        # shellcheck disable=SC1090
+        source "${dku}" 2>/dev/null || true
+        if [[ -n "${KYLIN_UOS_FAMILY:-}" ]]; then
+            printf '%s\n' "${KYLIN_UOS_FAMILY}"
+            return 0
+        fi
+    fi
     if [[ -f /etc/os-release ]]; then
         # shellcheck disable=SC1091
         source /etc/os-release
@@ -289,6 +304,26 @@ auto_detect_family() {
 
 auto_detect_arch() {
     uname -m
+}
+
+# 诊断：packages/<family>/<arch> 缺失时的友好提示（family 误判 or 忘了采集）
+diag_pkgs_dir() {
+    local family="$1" arch="$2" pkg_dir="${3:-${BUNDLE_ROOT:-/opt/deploy-bundle}/packages}"
+    warn "当前探测 family=${family} arch=${arch}，但 ${pkg_dir}/${family}/${arch} 不存在"
+    if [[ -d "${pkg_dir}" ]]; then
+        local sub
+        sub="$(ls -1 "${pkg_dir}" 2>/dev/null || true)"
+        if [[ -n "${sub}" ]]; then
+            info "packages/ 下实际已有："
+            printf '%s\n' "${sub}" | sed 's/^/    /'
+        else
+            warn "packages/ 目录为空，尚未执行过采集"
+        fi
+    else
+        warn "${pkg_dir} 不存在，尚未执行过采集"
+    fi
+    info "镜像机=客户机（同一台/同系统）：直接 bash scripts/collect.sh（自动探测）"
+    info "镜像机与客户机系统不同：TARGET_FAMILY=<family> TARGET_ARCH=<arch> bash scripts/collect.sh"
 }
 
 # 根据 family 推导包管理器
