@@ -26,7 +26,9 @@ for f in /etc/.kyinfo /etc/os-version /usr/lib/os-version; do
 done
 echo "    内核：$(uname -r)"
 echo "    架构：${ARCH_VAL}"
-echo "    glibc：$(ldd --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+$' || echo 未知)"
+# 用 awk 读全量输入：head -n1 提前关管道会让 ldd 吃 SIGPIPE（退出码 141），
+# 在 pipefail 下整个管道判失败，导致 "2.43" 与兜底 "未知" 同时出现（2026-11-14 实测）
+echo "    glibc：$(ldd --version 2>/dev/null | awk 'NR==1 { if (match($0, /[0-9]+\.[0-9]+$/)) print substr($0, RSTART, RLENGTH) }')"
 echo "    包管理器：$(command -v apt-get >/dev/null 2>&1 && printf 'apt ' ; command -v dpkg >/dev/null 2>&1 && printf 'dpkg ' ; command -v dnf >/dev/null 2>&1 && printf 'dnf ' ; command -v yum >/dev/null 2>&1 && printf 'yum ' ; echo)"
 
 echo "[归入 family]"
