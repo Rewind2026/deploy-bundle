@@ -162,6 +162,7 @@ assert "lib.sh 未知系统按包管理器兜底而非一律 rhel8-line" "grep -
 assert "detect.sh 只读探测报告存在且语法通过" "[[ -f scripts/detect.sh ]] && bash -n scripts/detect.sh"
 assert "COMPATIBILITY.md 收录 openKylin" "grep -q 'openKylin' docs/COMPATIBILITY.md"
 assert "detect.sh glibc 探测无 SIGPIPE 竞态（awk 读全量）" "grep -q 'NR==1' scripts/detect.sh"
+assert "install_mysql 依赖逐个安装（libaio1/libaio1t64 多变体修复）" "grep -q '逐个安装' scripts/install_mysql.sh"
 
 section "8. Ansible 配置文件"
 assert "ansible/deploy.yml 存在" "[[ -f ansible/deploy.yml ]]"
