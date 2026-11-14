@@ -1,6 +1,6 @@
-deploy-bundle 1.1.7
+deploy-bundle 1.1.8
 build: 2026-11-14
 target: MySQL 8.4.x + Tomcat 9.x + JDK 1.8.x
-note: openKylin（ID=openkylin，无 ID_LIKE、无 .kyinfo）此前掉入"保守默认 rhel8-line"分支被误判，现显式判 deb-line；未知系统兜底改为按包管理器判定（apt 系绝不走 rpm 采集路径）；新增 scripts/detect.sh 只读探测报告（family/arch/glibc/离线包目录状态/family 速查），拿到新系统先跑它确认分类；COMPATIBILITY.md 收录 openKylin 3.0 与 UOS Server 23/24/25
-scope: Kylin V10/V11（服务器版+桌面版）, UOS Server 20/1050/1060/1070/23/24/25, UOS 桌面版, openKylin 2.x/3.x, openEuler 20.03/22.03/24.03, Anolis OS 8/23
+note: openEuler 判定不再写死小版本（22.03/24.03）——26.09 掉进 *) 兜底被误判 rhel8-line，而 installer precheck 判 openeuler-line，两套结果不一致导致包采错目录、installer 报"包目录不存在"（2026-11-14 192.168.50.94 实测）。现改为按大版本判定：openEuler 20.* → rhel7-line，其余全部 → openeuler-line，与 precheck 逻辑对齐；COMPATIBILITY.md 同步修正（24.03 归 openeuler-line，收录 26.09）
+scope: Kylin V10/V11（服务器版+桌面版）, UOS Server 20/1050/1060/1070/23/24/25, UOS 桌面版, openKylin 2.x/3.x, openEuler 20.03/22.03/24.03/26.09, Anolis OS 8/23
 archs: x86_64, aarch64 (loongarch64 removed)
