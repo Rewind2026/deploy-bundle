@@ -1,6 +1,6 @@
-deploy-bundle 1.1.5
+deploy-bundle 1.1.6
 build: 2026-11-14
 target: MySQL 8.4.x + Tomcat 9.x + JDK 1.8.x
-note: 修复 UOS Server 25 被误判为 uos-desktop（deb-line）——探测只看 /usr/lib/os-version 且无包管理器兜底；现改查 UOS 惯例路径 /etc/os-version（/usr/lib 后备），并加 dnf/yum 兜底判 server；UOS Server 23/24/25（openEuler 基座）映射 openeuler-line
+note: auto_detect_family 复用 detect_kylin_uos.sh（消除重复的 UOS/麒麟判定逻辑，此前 lib.sh 只看 dpkg 存在即判 deb-line，UOS Server 25 不指定 TARGET_FAMILY 会误判）；collect.sh 自动探测时明确提示 TARGET_FAMILY 用途与可选值；install_* 包目录缺失时改为诊断输出（列出 packages/ 实际目录 + 给出正确的 collect 命令）
 scope: Kylin V10/V11（服务器版+桌面版）, UOS Server 20/1050/1060/1070/23/24/25, UOS 桌面版, openEuler 20.03/22.03/24.03, Anolis OS 8/23
 archs: x86_64, aarch64 (loongarch64 removed)
