@@ -69,7 +69,7 @@ done
 
 select_mysql_tar() {
     local pkgs_dir="${PKG_DIR}/${FAMILY}/${ARCH_VAL}"
-    [[ -d "${pkgs_dir}" ]] || die "${EX_DEPS}" "包目录不存在：${pkgs_dir}"
+    [[ -d "${pkgs_dir}" ]] || { diag_pkgs_dir "${FAMILY}" "${ARCH_VAL}" "${PKG_DIR}"; die "${EX_DEPS}" "包目录不存在：${pkgs_dir}"; }
 
     local host_glibc_minor="28"
     if command -v ldd >/dev/null 2>&1; then
