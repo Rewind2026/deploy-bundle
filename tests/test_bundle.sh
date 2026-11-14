@@ -157,6 +157,10 @@ assert "UOS Server 23/24/25 映射 openeuler-line" "grep -q '23\*|24\*|25\*' scr
 assert "lib.sh auto_detect_family 复用 detect_kylin_uos.sh（单一事实来源）" "grep -q 'source \"\${dku}\"' scripts/lib.sh"
 assert "lib.sh 含 diag_pkgs_dir 诊断助手" "grep -q 'diag_pkgs_dir()' scripts/lib.sh"
 assert "install 脚本缺失包目录时调用诊断" "[[ \$(grep -c 'diag_pkgs_dir \"\${FAMILY}\"' scripts/install_jdk.sh scripts/install_mysql.sh scripts/install_tomcat.sh | grep -c ':1') -eq 3 ]]"
+assert "openKylin 判 deb-line（lib.sh 显式分支）" "grep -q 'openkylin:\*' scripts/lib.sh"
+assert "lib.sh 未知系统按包管理器兜底而非一律 rhel8-line" "grep -q '未知系统：按包管理器兜底' scripts/lib.sh"
+assert "detect.sh 只读探测报告存在且语法通过" "[[ -f scripts/detect.sh ]] && bash -n scripts/detect.sh"
+assert "COMPATIBILITY.md 收录 openKylin" "grep -q 'openKylin' docs/COMPATIBILITY.md"
 
 section "8. Ansible 配置文件"
 assert "ansible/deploy.yml 存在" "[[ -f ansible/deploy.yml ]]"
