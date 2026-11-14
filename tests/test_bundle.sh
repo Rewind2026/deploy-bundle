@@ -161,6 +161,7 @@ assert "openKylin 判 deb-line（lib.sh 显式分支）" "grep -q 'openkylin:\*'
 assert "lib.sh 未知系统按包管理器兜底而非一律 rhel8-line" "grep -q '未知系统：按包管理器兜底' scripts/lib.sh"
 assert "detect.sh 只读探测报告存在且语法通过" "[[ -f scripts/detect.sh ]] && bash -n scripts/detect.sh"
 assert "COMPATIBILITY.md 收录 openKylin" "grep -q 'openKylin' docs/COMPATIBILITY.md"
+assert "detect.sh glibc 探测无 SIGPIPE 竞态（awk 读全量）" "grep -q 'NR==1' scripts/detect.sh"
 
 section "8. Ansible 配置文件"
 assert "ansible/deploy.yml 存在" "[[ -f ansible/deploy.yml ]]"
