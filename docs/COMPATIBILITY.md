@@ -11,11 +11,15 @@ deploy-bundle 把所有目标 Linux 归为 5 个家族:
 | `rhel7-line` | CentOS 7 / RHEL 7 / Rocky 7 / AlmaLinux 7 / Kylin V10 SP1-SP2 / openEuler 20.03 | 2.17 | RPM |
 | `rhel8-line` | CentOS 8 / RHEL 8 / Rocky 8 / AlmaLinux 8 / RHEL 9 / Rocky 9 / CentOS Stream 8-9 / openEuler 24.03 / Anolis OS 8 / TencentOS Server 3-4 / openCloudOS 8 | 2.28 | RPM |
 | `openeuler-line` | openEuler 22.03 / openEuler 20.03 LTS SP3+ / Kylin V11 | 2.34 | RPM |
-| `deb-line` | Ubuntu 18.04+ / Debian 10+ / UOS 1050 / UOS 1070 / Deepin 20+ / Kylin Desktop V10 SP3 | 2.27+ | DEB |
+| `deb-line` | Ubuntu 18.04+ / Debian 10+ / UOS 桌面版 / Deepin 20+ / Kylin Desktop V10 SP3+ / **openKylin 2.x/3.x** | 2.27+ | DEB |
 | `loongarch` | （预留） | - | - |
 
-**检测逻辑**: `scripts/precheck.sh` 中 `detect_os()` 函数。
+> **openKylin 注意**：社区版，`/etc/os-release` 为 `ID=openkylin` 且**无 `ID_LIKE`、无 `/etc/.kyinfo`**，
+> 必须按包管理器（apt/dpkg）归入 deb-line。2026-11-14 在 openKylin 3.0 (huanghe) 实测修复。
+
+**检测逻辑**: `scripts/lib.sh` 的 `auto_detect_family()`（未知系统按包管理器兜底）。
 Kylin/UOS 专项: `scripts/detect_kylin_uos.sh`。
+现场自查: `bash scripts/detect.sh`（只读探测报告，输出 family/arch/glibc/离线包目录状态）。
 
 ## 2. 架构矩阵
 
@@ -84,6 +88,8 @@ Kylin/UOS 专项: `scripts/detect_kylin_uos.sh`。
 | 银河麒麟 Kylin | V11 | openeuler-line | x86_64 | 已识别，待真机验证 |
 | 统信 UOS | 1050 | deb-line | x86_64 | OK |
 | 统信 UOS | 1070 | deb-line | x86_64 | OK |
+| 统信 UOS | Server 23/24/25 | openeuler-line | x86_64 | 已识别（2026-11-14 修复误判 desktop） |
+| openKylin | 3.0 (huanghe) | deb-line | x86_64 | 已识别（2026-11-14 修复误判 rhel8-line），待真机部署验证 |
 | openEuler | 22.03 | openeuler-line | x86_64 | OK |
 | openEuler | 20.03 | rhel7-line | x86_64 | OK |
 | 龙蜥 Anolis OS | 8 | rhel8-line | x86_64 | OK |
